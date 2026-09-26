@@ -1,0 +1,6 @@
+{
+  "name": "Hishab Admin",
+  "description": "Official Administration Control Panel for Hishab - Smart Billing. Simple Business.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
