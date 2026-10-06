@@ -1,8 +1,12 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Connection details can come from environment variables or custom runtime config
-const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const ENV_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const DEFAULT_SUPABASE_URL = 'https://nbhepwxmfabftxyhdppi.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iaGVwd3htZmFiZnR4eWhkcHBpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MzU4NjgsImV4cCI6MjEwMjIxMTg2OH0.gkq4B05wuSaHOFwTmY8MziTGVCsRsKxMJe4JASZjQgA';
+
+const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const ENV_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 const STORAGE_KEY_URL = 'hishab_admin_supabase_url';
 const STORAGE_KEY_ANON_KEY = 'hishab_admin_supabase_anon_key';
