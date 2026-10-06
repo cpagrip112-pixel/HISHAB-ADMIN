@@ -32,10 +32,14 @@ export interface PlanRecord {
   price: number;
   duration: string; // '1 Month', '2 Years', '3 Years'
   duration_months: number;
+  duration_value?: number;
+  duration_unit?: 'days' | 'months' | 'years';
   description: string;
   features: string[];
+  button_label?: string;
   is_active: boolean;
   is_popular: boolean;
+  display_order?: number;
   created_at: string;
   updated_at?: string;
 }
@@ -51,6 +55,8 @@ export interface SubscriptionRecord {
   trial_end_date?: string | null;
   created_at: string;
   user?: UserRecord;
+  payment_verified?: boolean;
+  last_payment_status?: string | null;
 }
 
 export interface PaymentRequestRecord {
@@ -119,8 +125,102 @@ export interface AdminActivityRecord {
 }
 
 export interface AppSettings {
+  free_trial_enabled: boolean;
   free_trial_days: number;
+  free_trial_duration: number;
+  free_trial_unit: 'days' | 'months' | 'years';
+  free_trial_features: string[];
   upi_id: string;
+}
+
+export interface LandingSectionConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  order: number;
+}
+
+export interface LandingFeatureItem {
+  id: string;
+  title: string;
+  description: string;
+  icon?: string;
+}
+
+export interface LandingBenefitItem {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface LandingPageContent {
+  id?: string;
+  status: 'draft' | 'published';
+  version?: number;
+  // Public Announcement Bar
+  announcement_enabled: boolean;
+  announcement_text: string;
+  announcement_link: string;
+  // Hero Section
+  hero_headline: string;
+  hero_subtitle: string;
+  hero_description: string;
+  hero_cta_primary_text: string;
+  hero_cta_primary_link: string;
+  hero_cta_secondary_text: string;
+  hero_cta_secondary_link: string;
+  // Feature Highlights
+  features_heading: string;
+  features_subheading: string;
+  features_list: LandingFeatureItem[];
+  // Services & Facilities
+  billing_pos_title: string;
+  billing_pos_description: string;
+  billing_pos_bullets: string[];
+  recharge_mobile_title: string;
+  recharge_mobile_description: string;
+  recharge_dth_title: string;
+  recharge_dth_description: string;
+  inventory_stock_title: string;
+  inventory_stock_description: string;
+  party_management_title: string;
+  party_management_description: string;
+  reports_invoices_title: string;
+  reports_invoices_description: string;
+  // Benefits Section
+  benefits_heading: string;
+  benefits_subheading: string;
+  benefits_list: LandingBenefitItem[];
+  // Call to Action
+  cta_heading: string;
+  cta_subheading: string;
+  cta_button_text: string;
+  cta_button_link: string;
+  // Footer & Contact Information
+  footer_text: string;
+  contact_email: string;
+  contact_phone: string;
+  contact_whatsapp: string;
+  contact_address: string;
+  // Sections order & toggle list
+  sections: LandingSectionConfig[];
+  updated_at?: string;
+  published_at?: string;
+}
+
+export interface BannerRecord {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string;
+  cta_text: string;
+  cta_link: string;
+  badge_text?: string;
+  type: 'hero' | 'promo' | 'popup';
+  is_active: boolean;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DashboardStats {

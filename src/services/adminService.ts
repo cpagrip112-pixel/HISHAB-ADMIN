@@ -19,7 +19,138 @@ import {
   AdminActivityRecord,
   DashboardStats,
   AppSettings,
+  LandingPageContent,
+  LandingSectionConfig,
+  BannerRecord,
 } from '../types';
+
+export const DEFAULT_LANDING_CONTENT: LandingPageContent = {
+  status: 'published',
+  version: 1,
+  announcement_enabled: true,
+  announcement_text: '🎉 New: Multi-Counter POS Billing & Instant Mobile & DTH Recharge Commission now live on Hishab!',
+  announcement_link: '#services',
+  hero_headline: 'Smart Billing. Simple Business. Complete Khata & Invoicing.',
+  hero_subtitle: 'The all-in-one business software built specifically for Indian retail shops, distributors, and service providers.',
+  hero_description: 'Fast barcode billing, GST & non-GST thermal invoices, instant mobile & DTH recharge with high commission, automated stock tracking, and customer udhar khata with WhatsApp reminders.',
+  hero_cta_primary_text: 'Start 15-Day Free Trial',
+  hero_cta_primary_link: '/register',
+  hero_cta_secondary_text: 'View Demo & Plans',
+  hero_cta_secondary_link: '#pricing',
+  features_heading: 'Everything Your Business Needs to Grow & Profit',
+  features_subheading: 'Engineered for speed, simplicity, and zero paperwork headaches.',
+  features_list: [
+    {
+      id: 'f1',
+      title: 'Lightning Fast POS Billing',
+      description: 'Create professional bills in less than 5 seconds with barcode scanning, custom discounts, and dual payment support.',
+    },
+    {
+      id: 'f2',
+      title: 'Mobile & DTH Recharge',
+      description: 'Offer recharge services directly to your customers with Airtel, Jio, Vi, BSNL, Tata Play, and earn guaranteed commissions.',
+    },
+    {
+      id: 'f3',
+      title: 'Real-time Stock Management',
+      description: 'Track item quantities, batch numbers, expiry dates, and receive automated alerts before products run out of stock.',
+    },
+    {
+      id: 'f4',
+      title: 'Customer & Supplier Khata',
+      description: 'Digital udhar book with one-click WhatsApp balance reminders and automated UPI payment collection links.',
+    },
+  ],
+  billing_pos_title: 'Point of Sale (POS) & Smart Invoicing',
+  billing_pos_description: 'Generate beautiful GST or non-GST bills on thermal printers (2-inch & 3-inch) or regular A4 printers. Works online and offline.',
+  billing_pos_bullets: [
+    'Quick barcode and item search',
+    'Supports cash, UPI, card, and credit payments',
+    'Custom shop logo, terms, and bank details on bill',
+    'Thermal Bluetooth & USB printer support',
+  ],
+  recharge_mobile_title: 'Mobile Recharge Service',
+  recharge_mobile_description: 'Prepaid and postpaid recharge for all Indian operators (Jio, Airtel, Vi, BSNL) with high profit margins and instant confirmation.',
+  recharge_dth_title: 'DTH TV Recharge Service',
+  recharge_dth_description: 'Instant customer TV top-ups for Tata Play, Airtel Digital TV, Dish TV, Sun Direct, and Videocon D2H with real-time balance check.',
+  inventory_stock_title: 'Product Catalog & Inventory Control',
+  inventory_stock_description: 'Organize products with categories, barcodes, wholesale vs retail prices, low-stock threshold notifications, and purchase order tracking.',
+  party_management_title: 'Customer & Supplier Khata Ledger',
+  party_management_description: 'Never lose track of pending market credit. Complete transaction timeline, PDF statement generation, and free WhatsApp reminder alerts.',
+  reports_invoices_title: 'Profit & Loss, GST, and Daily Sales Reports',
+  reports_invoices_description: 'Actionable financial summaries, daily register closing, GSTR-1 & GSTR-3B ready reports, top-selling items analysis, and expense management.',
+  benefits_heading: 'Why Over 10,000+ Indian Businesses Trust Hishab',
+  benefits_subheading: 'Built with rock-solid security, lightning responsiveness, and zero hidden fees.',
+  benefits_list: [
+    {
+      id: 'b1',
+      title: '100% Safe & Auto Cloud Backup',
+      description: 'Your business data is securely encrypted and backed up continuously on the cloud. Never lose a bill even if you lose your device.',
+    },
+    {
+      id: 'b2',
+      title: 'Works Seamlessly on Mobile & PC',
+      description: 'Access your shop dashboard from Android mobile, tablet, laptop, or desktop computer with real-time multi-counter synchronization.',
+    },
+    {
+      id: 'b3',
+      title: 'Guaranteed 24/7 Dedicated Support',
+      description: 'Get instant phone and WhatsApp assistance from our dedicated support team in Hindi, English, and regional languages.',
+    },
+    {
+      id: 'b4',
+      title: '15-Day Full-Featured Free Trial',
+      description: 'Experience all premium capabilities without giving any credit card or upfront commitment. Start in less than 2 minutes.',
+    },
+  ],
+  cta_heading: 'Ready to Upgrade Your Shop to Hishab?',
+  cta_subheading: 'Join thousands of smart retailers simplifying their daily sales, inventory, and accounting.',
+  cta_button_text: 'Start Free Trial Now',
+  cta_button_link: '/register',
+  footer_text: '© 2026 Hishab. All rights reserved. Smart Billing. Simple Business. Made with pride for Indian enterprises.',
+  contact_email: 'support@hishab.app',
+  contact_phone: '+91 98765 43210',
+  contact_whatsapp: '+91 98765 43210',
+  contact_address: 'Hishab Technologies Pvt. Ltd., Tech Hub, Bangalore, Karnataka, India - 560001',
+  sections: [
+    { id: 'announcement', name: 'Public Announcement Bar', enabled: true, order: 1 },
+    { id: 'hero', name: 'Hero Section & Headline', enabled: true, order: 2 },
+    { id: 'banners', name: 'Promotional Banners Carousel', enabled: true, order: 3 },
+    { id: 'features', name: 'Feature Highlights', enabled: true, order: 4 },
+    { id: 'services', name: 'Services & Facilities (POS, Recharge, Stock)', enabled: true, order: 5 },
+    { id: 'benefits', name: 'Benefits & Why Choose Us', enabled: true, order: 6 },
+    { id: 'pricing', name: 'Pricing & Premium Plans', enabled: true, order: 7 },
+    { id: 'cta', name: 'Call To Action (CTA)', enabled: true, order: 8 },
+    { id: 'footer', name: 'Footer & Contact Information', enabled: true, order: 9 },
+  ],
+};
+
+export const DEFAULT_BANNERS: BannerRecord[] = [
+  {
+    id: 'b-hero-1',
+    title: 'Festival Season Special Offer',
+    description: 'Get extra 6 months validity on our 2-Year Business Plan + Free Thermal Printer setup guide!',
+    image_url: 'https://images.unsplash.com/photo-1556742049-0a67c5574f73?w=1200&auto=format&fit=crop&q=80',
+    cta_text: 'Claim Offer Now',
+    cta_link: '#pricing',
+    badge_text: 'LIMITED TIME',
+    type: 'hero',
+    is_active: true,
+    display_order: 1,
+  },
+  {
+    id: 'b-promo-2',
+    title: 'Instant Recharge Commission Engine',
+    description: 'Earn up to 4.5% instant cashback & commission on every Airtel, Jio, and DTH recharge.',
+    image_url: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=1200&auto=format&fit=crop&q=80',
+    cta_text: 'Start Recharging',
+    cta_link: '#services',
+    badge_text: 'HIGH MARGIN',
+    type: 'promo',
+    is_active: true,
+    display_order: 2,
+  },
+];
 
 // Cache table existence so we do not repeatedly spam PostgREST for missing tables (PGRST205)
 const tableAvailability: { [tableName: string]: boolean } = {};
@@ -143,6 +274,8 @@ export const adminService = {
       'support_tickets',
       'admin_activity_logs',
       'app_settings',
+      'landing_page_content',
+      'landing_page_banners',
     ];
 
     const result: { [key: string]: boolean } = {};
@@ -557,7 +690,7 @@ export const adminService = {
   },
 
   // ----------------------------------------------------
-  // PLANS & PRICING
+  // PLANS & PRICING (EXACTLY 3 SLOTS: MONTHLY, 2 YEARS, 3 YEARS)
   // ----------------------------------------------------
   async getPlans(): Promise<PlanRecord[]> {
     if (!isSupabaseConfigured()) return [];
@@ -565,26 +698,58 @@ export const adminService = {
 
     const supabase = getSupabase();
     try {
-      const { data, error } = await supabase.from('plans').select('*').order('duration_months', { ascending: true });
+      const { data, error } = await supabase
+        .from('plans')
+        .select('*')
+        .order('display_order', { ascending: true, nullsFirst: false });
+
       if (error) {
         if (isTableMissingError(error)) tableAvailability['plans'] = false;
         return [];
       }
       if (!data || data.length === 0) return [];
 
-      return data.map((p) => ({
-        id: p.id,
-        name: p.name,
-        price: Number(p.price) || 0,
-        duration: p.duration || `${p.duration_months || 1} Month`,
-        duration_months: p.duration_months || 1,
-        description: p.description || '',
-        features: Array.isArray(p.features) ? p.features : typeof p.features === 'string' ? JSON.parse(p.features || '[]') : [],
-        is_active: Boolean(p.is_active ?? true),
-        is_popular: Boolean(p.is_popular ?? false),
-        created_at: p.created_at || new Date().toISOString(),
-        updated_at: p.updated_at,
-      }));
+      return data.map((p, idx) => {
+        let durationVal = p.duration_value;
+        let durationUnit: 'days' | 'months' | 'years' = (p.duration_unit as any) || 'months';
+
+        if (!durationVal || isNaN(Number(durationVal))) {
+          const m = Number(p.duration_months) || 1;
+          if (m >= 12 && m % 12 === 0) {
+            durationVal = m / 12;
+            durationUnit = 'years';
+          } else {
+            durationVal = m;
+            durationUnit = 'months';
+          }
+        }
+
+        const unitText = durationVal === 1 ? durationUnit.replace(/s$/, '') : durationUnit;
+        const formattedDuration =
+          p.duration || `${durationVal} ${unitText.charAt(0).toUpperCase() + unitText.slice(1)}`;
+
+        return {
+          id: p.id,
+          name: p.name,
+          price: Number(p.price) || 0,
+          duration: formattedDuration,
+          duration_months: Number(p.duration_months) || (durationUnit === 'years' ? durationVal * 12 : durationVal),
+          duration_value: Number(durationVal) || 1,
+          duration_unit: durationUnit,
+          description: p.description || '',
+          features: Array.isArray(p.features)
+            ? p.features
+            : typeof p.features === 'string'
+            ? JSON.parse(p.features || '[]')
+            : [],
+          button_label: p.button_label || 'Get Started',
+          is_active: Boolean(p.is_active ?? true),
+          is_popular: Boolean(p.is_popular ?? false),
+          display_order: Number(p.display_order) || (idx + 1),
+          created_at: p.created_at || new Date().toISOString(),
+          updated_at: p.updated_at,
+        };
+      });
     } catch {
       return [];
     }
@@ -600,30 +765,42 @@ export const adminService = {
         price: 299,
         duration: '1 Month',
         duration_months: 1,
+        duration_value: 1,
+        duration_unit: 'months',
         description: 'Flexible monthly billing plan for growing shops',
         features: ['Billing', 'Invoices', 'Products', 'Customers', 'Reports', 'Stock'],
+        button_label: 'Start 15-Day Free Trial',
         is_active: true,
         is_popular: false,
+        display_order: 1,
       },
       {
         name: '2 Years',
         price: 3999,
         duration: '2 Years',
         duration_months: 24,
+        duration_value: 2,
+        duration_unit: 'years',
         description: 'Best value for established businesses with long-term savings',
         features: ['Billing', 'Invoices', 'Products', 'Customers', 'Reports', 'Stock', 'Priority Support'],
+        button_label: 'Get 2 Years Access',
         is_active: true,
         is_popular: true,
+        display_order: 2,
       },
       {
         name: '3 Years',
         price: 4999,
         duration: '3 Years',
         duration_months: 36,
+        duration_value: 3,
+        duration_unit: 'years',
         description: 'Maximum savings with complete uninterrupted access',
         features: ['Billing', 'Invoices', 'Products', 'Customers', 'Reports', 'Stock', 'Dedicated Manager'],
+        button_label: 'Get 3 Years Access',
         is_active: true,
         is_popular: false,
+        display_order: 3,
       },
     ];
 
@@ -632,16 +809,20 @@ export const adminService = {
       if (error) throw error;
       tableAvailability['plans'] = true;
       await this.logActivity('Seeded 3 standard plans: Monthly, 2 Years, 3 Years');
-      return (data || []).map((p: any) => ({
+      return (data || []).map((p: any, idx: number) => ({
         id: p.id,
         name: p.name,
         price: Number(p.price) || 0,
         duration: p.duration,
         duration_months: p.duration_months,
+        duration_value: p.duration_value || (idx === 0 ? 1 : idx === 1 ? 2 : 3),
+        duration_unit: p.duration_unit || (idx === 0 ? 'months' : 'years'),
         description: p.description,
         features: Array.isArray(p.features) ? p.features : [],
+        button_label: p.button_label || 'Get Started',
         is_active: p.is_active,
         is_popular: p.is_popular,
+        display_order: p.display_order || (idx + 1),
         created_at: p.created_at,
       }));
     } catch (err) {
@@ -654,6 +835,7 @@ export const adminService = {
     await this.assertMfaAal2();
     const supabase = getSupabase();
 
+    // Enforce: only ONE plan marked popular at a time
     if (plan.is_popular) {
       await supabase.from('plans').update({ is_popular: false }).neq('id', plan.id);
     }
@@ -665,15 +847,35 @@ export const adminService = {
     if (plan.name !== undefined) updatePayload.name = sanitizeText(plan.name, 100);
     if (plan.price !== undefined) {
       const priceVal = validatePrice(plan.price);
-      if (!priceVal.valid) throw new Error(priceVal.error || 'Invalid price value.');
+      if (!priceVal.valid) throw new Error(priceVal.error || 'Invalid price value. Price must not be negative.');
       updatePayload.price = priceVal.price;
     }
-    if (plan.duration !== undefined) updatePayload.duration = sanitizeText(plan.duration, 50);
-    if (plan.duration_months !== undefined) updatePayload.duration_months = Math.max(1, Math.min(120, Number(plan.duration_months) || 1));
+
+    // Handle duration value and unit
+    if (plan.duration_value !== undefined || plan.duration_unit !== undefined) {
+      const val = Math.max(1, Number(plan.duration_value) || 1);
+      const unit = plan.duration_unit || 'months';
+
+      updatePayload.duration_value = val;
+      updatePayload.duration_unit = unit;
+
+      let calcMonths = val;
+      if (unit === 'years') calcMonths = val * 12;
+      else if (unit === 'days') calcMonths = Math.max(1, Math.round(val / 30));
+      updatePayload.duration_months = calcMonths;
+
+      const unitText = val === 1 ? unit.replace(/s$/, '') : unit;
+      updatePayload.duration = `${val} ${unitText.charAt(0).toUpperCase() + unitText.slice(1)}`;
+    } else if (plan.duration !== undefined) {
+      updatePayload.duration = sanitizeText(plan.duration, 50);
+    }
+
     if (plan.description !== undefined) updatePayload.description = sanitizeText(plan.description, 500);
     if (plan.features !== undefined) updatePayload.features = plan.features;
+    if (plan.button_label !== undefined) updatePayload.button_label = sanitizeText(plan.button_label, 50);
     if (plan.is_active !== undefined) updatePayload.is_active = plan.is_active;
     if (plan.is_popular !== undefined) updatePayload.is_popular = plan.is_popular;
+    if (plan.display_order !== undefined) updatePayload.display_order = Number(plan.display_order) || 1;
 
     const { error } = await supabase.from('plans').update(updatePayload).eq('id', plan.id);
     if (error) throw error;
@@ -681,6 +883,7 @@ export const adminService = {
     await this.logActivity(`Updated plan: ${plan.name || plan.id}`, null, {
       plan_id: plan.id,
       price: plan.price,
+      duration: updatePayload.duration,
       is_popular: plan.is_popular,
     });
   },
@@ -689,8 +892,23 @@ export const adminService = {
   // FREE TRIAL SETTINGS
   // ----------------------------------------------------
   async getAppSettings(): Promise<AppSettings> {
+    const defaultSettings: AppSettings = {
+      free_trial_enabled: true,
+      free_trial_days: 15,
+      free_trial_duration: 15,
+      free_trial_unit: 'days',
+      free_trial_features: [
+        'Billing & Invoicing',
+        'Mobile & DTH Recharge',
+        'Product & Stock Tracking',
+        'Customer Khata Ledger',
+        'Financial & GST Reports',
+      ],
+      upi_id: 'Q164166564@ybl',
+    };
+
     if (!isSupabaseConfigured() || !(await checkTableExists('app_settings'))) {
-      return { free_trial_days: 15, upi_id: 'Q164166564@ybl' };
+      return defaultSettings;
     }
     const supabase = getSupabase();
 
@@ -698,50 +916,478 @@ export const adminService = {
       const { data, error } = await supabase.from('app_settings').select('*');
       if (error || !data || data.length === 0) {
         if (error && isTableMissingError(error)) tableAvailability['app_settings'] = false;
-        return { free_trial_days: 15, upi_id: 'Q164166564@ybl' };
+        return defaultSettings;
       }
 
-      let trialDays = 15;
-      let upi = 'Q164166564@ybl';
+      const settings = { ...defaultSettings };
 
       data.forEach((row) => {
         if (row.key === 'free_trial_days') {
-          trialDays = parseInt(row.value, 10) || 15;
+          settings.free_trial_days = parseInt(row.value, 10) || 15;
+        } else if (row.key === 'free_trial_enabled') {
+          settings.free_trial_enabled = row.value === 'true' || row.value === true;
+        } else if (row.key === 'free_trial_duration') {
+          settings.free_trial_duration = parseInt(row.value, 10) || 15;
+        } else if (row.key === 'free_trial_unit') {
+          settings.free_trial_unit = (row.value as any) || 'days';
+        } else if (row.key === 'free_trial_features') {
+          try {
+            settings.free_trial_features = Array.isArray(row.value)
+              ? row.value
+              : JSON.parse(row.value);
+          } catch {
+            // ignore parse error
+          }
         } else if (row.key === 'upi_id') {
-          upi = row.value || upi;
+          settings.upi_id = row.value || settings.upi_id;
         }
       });
 
-      return { free_trial_days: trialDays, upi_id: upi };
+      return settings;
     } catch {
-      return { free_trial_days: 15, upi_id: 'Q164166564@ybl' };
+      return defaultSettings;
     }
   },
 
-  async updateFreeTrialDays(days: number): Promise<void> {
+  async updateFreeTrialSettings(settings: Partial<AppSettings>): Promise<void> {
     if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
     await this.assertMfaAal2();
-    const trialVal = validateTrialDays(days);
-    if (!trialVal.valid) throw new Error(trialVal.error || 'Invalid trial days value.');
-    const sanitizedDays = trialVal.days;
+
+    const duration = Math.max(1, Number(settings.free_trial_duration) || 15);
+    const unit = settings.free_trial_unit || 'days';
+    let calculatedDays = duration;
+    if (unit === 'months') calculatedDays = duration * 30;
+    else if (unit === 'years') calculatedDays = duration * 365;
+
     const supabase = getSupabase();
+    const rowsToUpsert = [
+      {
+        key: 'free_trial_enabled',
+        value: settings.free_trial_enabled !== undefined ? String(settings.free_trial_enabled) : 'true',
+        description: 'Enable or disable free trial for new Hishab users',
+        updated_at: new Date().toISOString(),
+      },
+      {
+        key: 'free_trial_duration',
+        value: String(duration),
+        description: 'Configured trial duration number',
+        updated_at: new Date().toISOString(),
+      },
+      {
+        key: 'free_trial_unit',
+        value: unit,
+        description: 'Configured trial duration unit (days, months, years)',
+        updated_at: new Date().toISOString(),
+      },
+      {
+        key: 'free_trial_days',
+        value: String(calculatedDays),
+        description: 'Calculated free trial days for new registrations',
+        updated_at: new Date().toISOString(),
+      },
+    ];
 
-    const { error } = await supabase.from('app_settings').upsert({
-      key: 'free_trial_days',
-      value: sanitizedDays.toString(),
-      description: 'Number of free trial days given to new registered Hishab users',
-      updated_at: new Date().toISOString(),
-    });
+    if (settings.free_trial_features) {
+      rowsToUpsert.push({
+        key: 'free_trial_features',
+        value: JSON.stringify(settings.free_trial_features),
+        description: 'List of features accessible during free trial',
+        updated_at: new Date().toISOString(),
+      });
+    }
 
+    const { error } = await supabase.from('app_settings').upsert(rowsToUpsert, { onConflict: 'key' });
     if (error) {
       if (isTableMissingError(error)) tableAvailability['app_settings'] = false;
       throw error;
     }
 
     tableAvailability['app_settings'] = true;
-    await this.logActivity(`Updated free trial days to ${days} days`, null, {
-      free_trial_days: days,
+    await this.logActivity(`Updated free trial settings: ${duration} ${unit} (${calculatedDays} days total)`, null, {
+      enabled: settings.free_trial_enabled,
+      duration,
+      unit,
+      calculated_days: calculatedDays,
     });
+  },
+
+  async updateFreeTrialDays(days: number): Promise<void> {
+    await this.updateFreeTrialSettings({
+      free_trial_duration: days,
+      free_trial_unit: 'days',
+    });
+  },
+
+  // ----------------------------------------------------
+  // LANDING PAGE MANAGEMENT (HEADLINE, HERO, SECTIONS, PUBLISH)
+  // ----------------------------------------------------
+  async getLandingPageContent(status: 'draft' | 'published' = 'published'): Promise<LandingPageContent> {
+    if (!isSupabaseConfigured()) {
+      return { ...DEFAULT_LANDING_CONTENT, status };
+    }
+
+    const supabase = getSupabase();
+
+    // 1. Try dedicated landing_page_content table
+    try {
+      if (await checkTableExists('landing_page_content')) {
+        const { data, error } = await supabase
+          .from('landing_page_content')
+          .select('*')
+          .eq('status', status)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!error && data) {
+          // If stored as structured JSON or payload column
+          const content = data.content_json || data;
+          return {
+            ...DEFAULT_LANDING_CONTENT,
+            ...content,
+            id: data.id,
+            status: data.status || status,
+            published_at: data.published_at,
+            updated_at: data.updated_at,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Fallback to app_settings key-value store
+    try {
+      if (await checkTableExists('app_settings')) {
+        const key = `landing_page_${status}`;
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value, updated_at')
+          .eq('key', key)
+          .maybeSingle();
+
+        if (!error && data?.value) {
+          const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+          return {
+            ...DEFAULT_LANDING_CONTENT,
+            ...parsed,
+            status,
+            updated_at: data.updated_at,
+          };
+        }
+
+        // If draft was requested but only published exists, return published as base
+        if (status === 'draft') {
+          const { data: pubData } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'landing_page_published')
+            .maybeSingle();
+          if (pubData?.value) {
+            const parsed = typeof pubData.value === 'string' ? JSON.parse(pubData.value) : pubData.value;
+            return {
+              ...DEFAULT_LANDING_CONTENT,
+              ...parsed,
+              status: 'draft',
+            };
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return { ...DEFAULT_LANDING_CONTENT, status };
+  },
+
+  async saveLandingPageDraft(content: LandingPageContent): Promise<LandingPageContent> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
+    await this.assertMfaAal2();
+
+    const supabase = getSupabase();
+    const now = new Date().toISOString();
+    const draftPayload: LandingPageContent = {
+      ...content,
+      status: 'draft',
+      updated_at: now,
+    };
+
+    // Save to app_settings key
+    try {
+      await supabase.from('app_settings').upsert({
+        key: 'landing_page_draft',
+        value: JSON.stringify(draftPayload),
+        description: 'Draft content for Hishab Landing Page',
+        updated_at: now,
+      });
+      tableAvailability['app_settings'] = true;
+    } catch {
+      // ignore
+    }
+
+    // Also save to landing_page_content table if it exists
+    try {
+      if (await checkTableExists('landing_page_content')) {
+        await supabase.from('landing_page_content').upsert(
+          {
+            status: 'draft',
+            content_json: draftPayload,
+            updated_at: now,
+          },
+          { onConflict: 'status' }
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    await this.logActivity('Saved Landing Page Draft');
+    return draftPayload;
+  },
+
+  async publishLandingPage(content: LandingPageContent): Promise<LandingPageContent> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
+    await this.assertMfaAal2();
+
+    const supabase = getSupabase();
+    const now = new Date().toISOString();
+    const publishedPayload: LandingPageContent = {
+      ...content,
+      status: 'published',
+      published_at: now,
+      updated_at: now,
+      version: (content.version || 1) + 1,
+    };
+
+    // 1. Save to app_settings (key: landing_page_published)
+    try {
+      await supabase.from('app_settings').upsert({
+        key: 'landing_page_published',
+        value: JSON.stringify(publishedPayload),
+        description: 'Published authoritative content for Hishab Landing Page',
+        updated_at: now,
+      });
+      tableAvailability['app_settings'] = true;
+    } catch (err: any) {
+      throw err;
+    }
+
+    // 2. Also save to landing_page_content table if it exists
+    try {
+      if (await checkTableExists('landing_page_content')) {
+        await supabase.from('landing_page_content').upsert(
+          {
+            status: 'published',
+            content_json: publishedPayload,
+            published_at: now,
+            updated_at: now,
+          },
+          { onConflict: 'status' }
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    await this.logActivity(`Published Landing Page (version ${publishedPayload.version})`, null, {
+      headline: publishedPayload.hero_headline,
+      version: publishedPayload.version,
+    });
+
+    return publishedPayload;
+  },
+
+  // ----------------------------------------------------
+  // LANDING PAGE BANNERS & BRANDING
+  // ----------------------------------------------------
+  async getBanners(): Promise<BannerRecord[]> {
+    if (!isSupabaseConfigured()) return DEFAULT_BANNERS;
+    const supabase = getSupabase();
+
+    // 1. Try landing_page_banners table
+    try {
+      if (await checkTableExists('landing_page_banners')) {
+        const { data, error } = await supabase
+          .from('landing_page_banners')
+          .select('*')
+          .order('display_order', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          return data.map((b) => ({
+            id: b.id,
+            title: b.title || '',
+            description: b.description || '',
+            image_url: b.image_url || '',
+            cta_text: b.cta_text || 'Learn More',
+            cta_link: b.cta_link || '#',
+            badge_text: b.badge_text || '',
+            type: b.type || 'hero',
+            is_active: Boolean(b.is_active ?? true),
+            display_order: Number(b.display_order) || 1,
+            created_at: b.created_at,
+            updated_at: b.updated_at,
+          }));
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Try app_settings key
+    try {
+      if (await checkTableExists('app_settings')) {
+        const { data, error } = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'landing_page_banners')
+          .maybeSingle();
+
+        if (!error && data?.value) {
+          const parsed = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return DEFAULT_BANNERS;
+  },
+
+  async saveBanner(banner: Partial<BannerRecord>): Promise<BannerRecord> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
+    await this.assertMfaAal2();
+
+    const supabase = getSupabase();
+    const id = banner.id || `banner_${Date.now()}`;
+    const now = new Date().toISOString();
+
+    const bannerRecord: BannerRecord = {
+      id,
+      title: sanitizeText(banner.title || 'Promotional Banner', 150),
+      description: sanitizeText(banner.description || '', 500),
+      image_url: sanitizeSafeUrl(banner.image_url || '') || '',
+      cta_text: sanitizeText(banner.cta_text || 'View Offer', 50),
+      cta_link: sanitizeSafeUrl(banner.cta_link || '#') || '#',
+      badge_text: sanitizeText(banner.badge_text || '', 50),
+      type: (banner.type as any) || 'hero',
+      is_active: Boolean(banner.is_active ?? true),
+      display_order: Number(banner.display_order) || 1,
+      updated_at: now,
+      created_at: banner.created_at || now,
+    };
+
+    // Save to landing_page_banners table if available
+    let savedInTable = false;
+    try {
+      if (await checkTableExists('landing_page_banners')) {
+        const { error } = await supabase.from('landing_page_banners').upsert(bannerRecord);
+        if (!error) savedInTable = true;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Always maintain in app_settings banners list as well
+    try {
+      const currentBanners = await this.getBanners();
+      const existingIdx = currentBanners.findIndex((b) => b.id === id);
+      let updatedList: BannerRecord[];
+      if (existingIdx >= 0) {
+        updatedList = [...currentBanners];
+        updatedList[existingIdx] = bannerRecord;
+      } else {
+        updatedList = [...currentBanners, bannerRecord];
+      }
+
+      await supabase.from('app_settings').upsert({
+        key: 'landing_page_banners',
+        value: JSON.stringify(updatedList),
+        description: 'Published promotional and hero banners for landing page',
+        updated_at: now,
+      });
+    } catch {
+      // ignore
+    }
+
+    await this.logActivity(`Saved banner: ${bannerRecord.title}`, null, {
+      banner_id: bannerRecord.id,
+      type: bannerRecord.type,
+      is_active: bannerRecord.is_active,
+    });
+
+    return bannerRecord;
+  },
+
+  async deleteBanner(bannerId: string): Promise<void> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
+    await this.assertMfaAal2();
+
+    const supabase = getSupabase();
+
+    try {
+      if (await checkTableExists('landing_page_banners')) {
+        await supabase.from('landing_page_banners').delete().eq('id', bannerId);
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const currentBanners = await this.getBanners();
+      const updatedList = currentBanners.filter((b) => b.id !== bannerId);
+      await supabase.from('app_settings').upsert({
+        key: 'landing_page_banners',
+        value: JSON.stringify(updatedList),
+        description: 'Published promotional and hero banners for landing page',
+        updated_at: new Date().toISOString(),
+      });
+    } catch {
+      // ignore
+    }
+
+    await this.logActivity(`Deleted banner ${bannerId}`);
+  },
+
+  async uploadBannerImage(file: File): Promise<{ url: string }> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
+    await this.assertMfaAal2();
+
+    // Validate type and size
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      throw new Error('Invalid image format. Allowed formats: PNG, JPG, WEBP, SVG.');
+    }
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      throw new Error('Image file size must be less than 5MB.');
+    }
+
+    const supabase = getSupabase();
+    const ext = file.name.split('.').pop() || 'png';
+    const filePath = `banners/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+
+    try {
+      const { data, error } = await supabase.storage.from('landing-banners').upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+      if (error) {
+        throw new Error(
+          `Supabase Storage upload failed: ${error.message}. You can also enter a direct image URL.`
+        );
+      }
+
+      const { data: publicUrlData } = supabase.storage.from('landing-banners').getPublicUrl(data.path);
+      return { url: publicUrlData.publicUrl };
+    } catch (err: any) {
+      throw new Error(
+        err.message || 'Storage bucket "landing-banners" is not yet created. You can paste an image URL directly.'
+      );
+    }
   },
 
   // ----------------------------------------------------
@@ -1026,23 +1672,103 @@ export const adminService = {
         }
       }
 
-      const subscriptions: SubscriptionRecord[] = rows.map((r) => ({
-        id: r.id,
-        user_id: r.user_id,
-        plan_id: r.plan_id,
-        plan_name: planMap.get(r.plan_id) || 'Standard',
-        status: r.status,
-        start_date: r.start_date,
-        expiry_date: r.expiry_date,
-        trial_end_date: r.trial_end_date,
-        created_at: r.created_at,
-        user: userMap.get(r.user_id),
-      }));
+      // Check payment verification status for each user
+      const paymentStatusMap = new Map<string, { verified: boolean; lastStatus: string }>();
+      const paymentTable = detectedPaymentTable || 'payments';
+      if (userIds.length > 0 && (await checkTableExists(paymentTable))) {
+        try {
+          const { data: payments } = await supabase
+            .from(paymentTable)
+            .select('user_id, status, created_at')
+            .in('user_id', userIds)
+            .order('created_at', { ascending: false });
+
+          payments?.forEach((p) => {
+            if (!paymentStatusMap.has(p.user_id)) {
+              paymentStatusMap.set(p.user_id, {
+                verified: p.status === 'verified',
+                lastStatus: p.status,
+              });
+            } else if (p.status === 'verified') {
+              paymentStatusMap.set(p.user_id, {
+                verified: true,
+                lastStatus: 'verified',
+              });
+            }
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      const subscriptions: SubscriptionRecord[] = rows.map((r) => {
+        const payInfo = paymentStatusMap.get(r.user_id);
+        return {
+          id: r.id,
+          user_id: r.user_id,
+          plan_id: r.plan_id,
+          plan_name: planMap.get(r.plan_id) || 'Standard',
+          status: r.status,
+          start_date: r.start_date,
+          expiry_date: r.expiry_date,
+          trial_end_date: r.trial_end_date,
+          created_at: r.created_at,
+          user: userMap.get(r.user_id),
+          payment_verified: payInfo?.verified ?? false,
+          last_payment_status: payInfo?.lastStatus ?? null,
+        };
+      });
 
       return { subscriptions, totalCount: count || subscriptions.length };
     } catch {
       return { subscriptions: [], totalCount: 0 };
     }
+  },
+
+  async updateSubscription(
+    subscriptionId: string,
+    payload: {
+      status?: 'trial' | 'active' | 'expired' | 'cancelled';
+      plan_id?: string | null;
+      expiry_date?: string | null;
+      start_date?: string | null;
+      notes?: string;
+    }
+  ): Promise<void> {
+    if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
+    await this.assertMfaAal2();
+    const supabase = getSupabase();
+
+    const updatePayload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (payload.status) updatePayload.status = payload.status;
+    if (payload.plan_id !== undefined) updatePayload.plan_id = payload.plan_id;
+    if (payload.expiry_date !== undefined) updatePayload.expiry_date = payload.expiry_date;
+    if (payload.start_date !== undefined) updatePayload.start_date = payload.start_date;
+
+    const { data: currentSub } = await supabase
+      .from('subscriptions')
+      .select('user_id, status, plan_id')
+      .eq('id', subscriptionId)
+      .maybeSingle();
+
+    const { error } = await supabase.from('subscriptions').update(updatePayload).eq('id', subscriptionId);
+    if (error) throw error;
+
+    await this.logActivity(
+      `Updated user subscription ${subscriptionId} to status: ${payload.status || 'modified'}`,
+      currentSub?.user_id,
+      {
+        subscription_id: subscriptionId,
+        previous_status: currentSub?.status,
+        new_status: payload.status,
+        plan_id: payload.plan_id,
+        expiry_date: payload.expiry_date,
+        notes: payload.notes,
+      }
+    );
   },
 
   // ----------------------------------------------------

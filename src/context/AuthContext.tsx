@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import QRCode from 'qrcode';
 import { getSupabase, isSupabaseConfigured, cleanSupabaseUrl, getSupabaseCredentials } from '../lib/supabase';
 import { sanitizeErrorMessage } from '../lib/security';
 
@@ -552,7 +553,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'Please enter a valid 6-digit verification code.' };
     }
 
-    const targetFactorId = factorId || selectedFactorId;
+    let targetFactorId = factorId || selectedFactorId;
+    if (!targetFactorId) {
+      try {
+        const supabase = getSupabase();
+        const { data: fData } = await supabase.auth.mfa.listFactors();
+        const found = fData?.all?.find((f) => f.status === 'verified' && f.factor_type === 'totp') || fData?.all?.[0];
+        if (found) {
+          targetFactorId = found.id;
+          setSelectedFactorId(found.id);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     if (!targetFactorId) {
       return { success: false, error: 'No MFA factor found. Please enroll your authenticator app.' };
     }
@@ -604,38 +619,124 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Initiates first-time MFA TOTP enrollment using Supabase Auth.
-   * Returns official QR code SVG and manual setup secret.
+   * Initiates MFA TOTP enrollment using Supabase Auth.
+   * Generates a high-resolution QR Code from the standard RFC-compliant otpauth URI.
+   * Handles duplicate friendly name and factor conflicts gracefully.
    */
   const startMfaEnrollment = async (): Promise<{ success: boolean; data?: MfaEnrollmentData; error?: string }> => {
     setError(null);
     try {
       const supabase = getSupabase();
 
-      // Clean up any stale unverified TOTP factors to avoid factor clutter
+      // Step 1: Clean up any stale or unverified factors
       try {
         const { data: fData } = await supabase.auth.mfa.listFactors();
-        if (fData?.all) {
+        if (fData?.all && fData.all.length > 0) {
           for (const f of fData.all) {
-            if (f.status === 'unverified') {
-              await supabase.auth.mfa.unenroll({ factorId: f.id });
+            if (
+              f.status === 'unverified' ||
+              f.factor_type === 'totp' ||
+              f.friendly_name === 'Hishab Admin Authenticator' ||
+              f.friendly_name?.toLowerCase().includes('hishab')
+            ) {
+              try {
+                await supabase.auth.mfa.unenroll({ factorId: f.id });
+              } catch (uErr) {
+                // Ignore if server prevents unenrolling at current AAL
+                console.warn('Cleanup unenroll notice for factor:', f.id, uErr);
+              }
             }
           }
         }
-      } catch {
-        // ignore cleanup errors
+      } catch (listErr) {
+        console.warn('listFactors error before enrollment:', listErr);
       }
 
-      const { data, error: enrollErr } = await supabase.auth.mfa.enroll({
+      // Step 2: Attempt enrollment with standard friendly name
+      let enrollRes = await supabase.auth.mfa.enroll({
         factorType: 'totp',
         friendlyName: 'Hishab Admin Authenticator',
         issuer: 'Hishab Admin',
       });
 
+      // Step 3: Handle duplicate friendly name error gracefully if old factor couldn't be deleted
+      if (
+        enrollRes.error &&
+        (enrollRes.error.message.toLowerCase().includes('already exists') ||
+          enrollRes.error.message.toLowerCase().includes('friendly name'))
+      ) {
+        // Attempt targeted unenroll of the exact conflicting factor
+        try {
+          const { data: fData } = await supabase.auth.mfa.listFactors();
+          const existing = fData?.all?.find(
+            (f) => f.friendly_name === 'Hishab Admin Authenticator' || f.factor_type === 'totp'
+          );
+          if (existing) {
+            await supabase.auth.mfa.unenroll({ factorId: existing.id });
+            enrollRes = await supabase.auth.mfa.enroll({
+              factorType: 'totp',
+              friendlyName: 'Hishab Admin Authenticator',
+              issuer: 'Hishab Admin',
+            });
+          }
+        } catch {
+          // ignore
+        }
+
+        // If still blocked by duplicate name, use timestamped friendly name so enrollment NEVER fails
+        if (enrollRes.error && enrollRes.error.message.toLowerCase().includes('already exists')) {
+          const uniqueFriendlyName = `Hishab Admin Authenticator ${Math.floor(Date.now() / 1000).toString().slice(-4)}`;
+          enrollRes = await supabase.auth.mfa.enroll({
+            factorType: 'totp',
+            friendlyName: uniqueFriendlyName,
+            issuer: 'Hishab Admin',
+          });
+        }
+      }
+
+      const { data, error: enrollErr } = enrollRes;
+
       if (enrollErr || !data || !data.totp) {
         const msg = enrollErr?.message || 'Failed to start MFA enrollment.';
         setError(msg);
         return { success: false, error: msg };
+      }
+
+      // Determine dynamic user email
+      let userEmail = user?.email;
+      if (!userEmail) {
+        try {
+          const { data: userData } = await supabase.auth.getUser();
+          userEmail = userData?.user?.email;
+        } catch {
+          // ignore
+        }
+      }
+      userEmail = (userEmail || 'admin@hishab.app').trim();
+
+      const issuer = 'Hishab Admin';
+      const secret = data.totp.secret;
+
+      // RFC 6238 compliant TOTP URI with dynamic user email:
+      // Format: otpauth://totp/Hishab%20Admin:user@example.com?secret=BASE32_SECRET&issuer=Hishab%20Admin&algorithm=SHA1&digits=6&period=30
+      const canonicalUri = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(userEmail)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+      const finalUri = data.totp.uri || canonicalUri;
+
+      // Generate pristine, scannable QR Code Data URL directly from the otpauth URI
+      let finalQrCode = '';
+      try {
+        finalQrCode = await QRCode.toDataURL(finalUri, {
+          width: 256,
+          margin: 2,
+          errorCorrectionLevel: 'M',
+          color: {
+            dark: '#0f172a',
+            light: '#ffffff',
+          },
+        });
+      } catch (qrErr) {
+        console.warn('QRCode generation fallback to Supabase svg:', qrErr);
+        finalQrCode = data.totp.qr_code || '';
       }
 
       setSelectedFactorId(data.id);
@@ -644,9 +745,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         success: true,
         data: {
           factorId: data.id,
-          qrCode: data.totp.qr_code,
+          qrCode: finalQrCode,
           secret: data.totp.secret,
-          uri: data.totp.uri,
+          uri: finalUri,
         },
       };
     } catch (err: any) {
@@ -694,6 +795,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMfaStatus('VERIFIED');
       setMfaLevel('aal2');
 
+      // Now that we have AAL2, clean up any stale unverified factors
+      try {
+        const { data: fData } = await supabase.auth.mfa.listFactors();
+        if (fData?.all) {
+          for (const f of fData.all) {
+            if (f.id !== factorId && f.status === 'unverified') {
+              await supabase.auth.mfa.unenroll({ factorId: f.id });
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       return { success: true };
     } catch (err: any) {
       const msg = sanitizeErrorMessage(err, 'Failed to activate two-factor authentication.');
@@ -703,7 +818,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
-   * Resets MFA enrollment state for troubleshooting / reconfiguration
+   * Resets MFA enrollment state for troubleshooting / reconfiguration.
+   * Safely unenrolls existing factors before generating a fresh one.
    */
   const resetMfaEnrollment = async (): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -711,12 +827,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: fData } = await supabase.auth.mfa.listFactors();
       if (fData?.all) {
         for (const f of fData.all) {
-          if (f.status === 'unverified') {
-            await supabase.auth.mfa.unenroll({ factorId: f.id });
+          if (
+            f.factor_type === 'totp' ||
+            f.friendly_name === 'Hishab Admin Authenticator' ||
+            f.friendly_name?.toLowerCase().includes('hishab') ||
+            f.status === 'unverified'
+          ) {
+            try {
+              await supabase.auth.mfa.unenroll({ factorId: f.id });
+            } catch (uErr) {
+              console.warn('Could not unenroll factor during reset:', f.id, uErr);
+            }
           }
         }
       }
+      setSelectedFactorId(null);
+      setFactors([]);
+      setIsMfaVerified(false);
       setMfaStatus('REQUIRED_ENROLL');
+      setMfaLevel('aal1');
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err?.message };
