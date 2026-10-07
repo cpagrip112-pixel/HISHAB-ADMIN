@@ -33,20 +33,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateTab, onSelectUse
   const [rejectingPayment, setRejectingPayment] = useState<PaymentRequestRecord | null>(null);
   const [missingTables, setMissingTables] = useState<string[]>([]);
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (force = false) => {
     setLoading(true);
     try {
-      const [statsData, paymentsData, tableStatus] = await Promise.all([
+      if (force) {
+        adminService.clearTableCache();
+      }
+      const [statsData, paymentsData, missing] = await Promise.all([
         adminService.getDashboardStats(),
         adminService.getPaymentRequests({ status: 'pending', pageSize: 5 }),
-        adminService.getTableStatus(),
+        adminService.getMissingRequiredTables(force),
       ]);
       setStats(statsData);
       setPendingPayments(paymentsData.payments);
-
-      const missing = Object.entries(tableStatus)
-        .filter(([_, exists]) => !exists)
-        .map(([table]) => table);
       setMissingTables(missing);
     } catch {
       // ignore
@@ -56,7 +55,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateTab, onSelectUse
   };
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData(true);
   }, []);
 
   const handleVerify = async () => {
@@ -106,10 +105,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigateTab, onSelectUse
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => {
-              adminService.clearTableCache();
-              fetchDashboardData();
-            }}
+            onClick={() => fetchDashboardData(true)}
             disabled={loading}
             className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
           >

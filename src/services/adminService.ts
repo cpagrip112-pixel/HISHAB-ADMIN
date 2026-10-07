@@ -1,4 +1,4 @@
-import { getSupabase, isSupabaseConfigured } from '../lib/supabase';
+import { getSupabase, isSupabaseConfigured, probeTableHealth, refreshPostgrestSchema } from '../lib/supabase';
 import {
   isValidUuid,
   sanitizeSafeUrl,
@@ -152,6 +152,82 @@ export const DEFAULT_BANNERS: BannerRecord[] = [
   },
 ];
 
+export const APP_SETTINGS_SQL_MIGRATION = `-- ==============================================================================
+-- HISHAB DATABASE MIGRATION: public.app_settings
+-- Free Trial Configuration & Global Platform Settings
+-- ==============================================================================
+
+-- 1. Create public.app_settings table
+CREATE TABLE IF NOT EXISTS public.app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Insert Default Global Settings (15 Days Free Trial for New Users)
+-- NOTE: This setting applies only when registering NEW user accounts.
+-- It does NOT modify or reset existing users' trial expiration dates.
+INSERT INTO public.app_settings (key, value, description)
+VALUES 
+  ('free_trial_days', '15', 'Default trial duration in days granted to newly registered users'),
+  ('free_trial_enabled', 'true', 'Global toggle: Whether free trial is enabled for new registrations'),
+  ('free_trial_duration', '15', 'Configured trial duration quantity'),
+  ('free_trial_unit', 'days', 'Configured trial duration unit (days, months, years)'),
+  ('upi_id', 'Q164166564@ybl', 'Default manual UPI ID for subscription verification')
+ON CONFLICT (key) DO NOTHING;
+
+-- 3. Enable Row Level Security (RLS)
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+
+-- 4. Safe helper function to verify Admin / Super Admin status with MFA assurance
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  -- Defense-in-depth: Require AAL2 session when MFA is enrolled
+  IF (auth.jwt() ->> 'aal') IS NOT NULL AND (auth.jwt() ->> 'aal') <> 'aal2' THEN
+    IF EXISTS (
+      SELECT 1 FROM auth.mfa_factors 
+      WHERE user_id = auth.uid() AND status = 'verified'
+    ) THEN
+      RETURN FALSE;
+    END IF;
+  END IF;
+
+  RETURN (
+    (to_regclass('public.admin_users') IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.admin_users
+      WHERE user_id = auth.uid() AND (role = 'ADMIN' OR role = 'SUPER_ADMIN')
+    )) OR
+    (to_regclass('public.profiles') IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND (role = 'ADMIN' OR role = 'SUPER_ADMIN')
+    )) OR
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('ADMIN', 'SUPER_ADMIN')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 5. RLS Policies
+DROP POLICY IF EXISTS "Public read app_settings" ON public.app_settings;
+DROP POLICY IF EXISTS "Admin write app_settings" ON public.app_settings;
+DROP POLICY IF EXISTS admin_all_settings ON public.app_settings;
+
+CREATE POLICY "Public read app_settings"
+  ON public.app_settings
+  FOR SELECT
+  TO public
+  USING (true);
+
+CREATE POLICY "Admin write app_settings"
+  ON public.app_settings
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+`;
+
 // Cache table existence so we do not repeatedly spam PostgREST for missing tables (PGRST205)
 const tableAvailability: { [tableName: string]: boolean } = {};
 
@@ -162,16 +238,50 @@ let detectedSupportTable: 'support_tickets' | 'enquiries' | null = null;
 
 function isTableMissingError(err: any): boolean {
   if (!err) return false;
+
+  // 1. Explicitly ignore RLS and permission errors - table exists in PostgreSQL
+  if (
+    err.code === '42501' ||
+    err.code === 'PGRST301' ||
+    err.status === 401 ||
+    err.status === 403 ||
+    err.message?.toLowerCase()?.includes('permission denied') ||
+    err.message?.toLowerCase()?.includes('row-level security') ||
+    err.message?.toLowerCase()?.includes('jwt')
+  ) {
+    return false;
+  }
+
+  // 2. Explicitly ignore column missing errors (PGRST204) - table exists in PostgreSQL
+  if (
+    err.code === 'PGRST204' ||
+    (err.message && err.message.includes('column') && err.message.includes('schema cache'))
+  ) {
+    return false;
+  }
+
+  // 3. Transient network or abort errors do NOT mean the table is missing
+  if (
+    err.name === 'AbortError' ||
+    err.message?.includes('Failed to fetch') ||
+    err.message?.includes('NetworkError')
+  ) {
+    return false;
+  }
+
+  // 4. Exact table missing indicators from PostgREST / PostgreSQL
   return (
     err.code === 'PGRST205' ||
-    err.message?.includes('schema cache') ||
-    err.message?.includes('Could not find the table') ||
-    err.message?.includes('relation') && err.message?.includes('does not exist')
+    err.code === '42P01' ||
+    (Boolean(err.message) && (
+      (err.message.includes('Could not find the table') && !err.message.includes('column')) ||
+      (err.message.includes('relation') && err.message.includes('does not exist'))
+    ))
   );
 }
 
-async function checkTableExists(tableName: string): Promise<boolean> {
-  if (tableAvailability[tableName] !== undefined) {
+async function checkTableExists(tableName: string, force = false): Promise<boolean> {
+  if (!force && tableAvailability[tableName] !== undefined) {
     return tableAvailability[tableName];
   }
 
@@ -181,34 +291,33 @@ async function checkTableExists(tableName: string): Promise<boolean> {
   }
 
   const supabase = getSupabase();
-  try {
-    const { error } = await supabase.from(tableName).select('id', { head: true, count: 'exact' });
-    if (error && isTableMissingError(error)) {
-      tableAvailability[tableName] = false;
-      return false;
-    }
-    tableAvailability[tableName] = !error;
-    return !error;
-  } catch {
-    tableAvailability[tableName] = false;
-    return false;
-  }
+  const res = await probeTableHealth(supabase, tableName);
+  tableAvailability[tableName] = res.exists;
+  return res.exists;
 }
 
-async function detectTables() {
+async function detectTables(force = false) {
   if (!isSupabaseConfigured()) return;
 
-  const [hasProfiles, hasUsers, hasPayments, hasPaymentRequests, hasRechargeTxns, hasRecharges, hasSupportTickets, hasEnquiries] =
-    await Promise.all([
-      checkTableExists('profiles'),
-      checkTableExists('users'),
-      checkTableExists('payments'),
-      checkTableExists('payment_requests'),
-      checkTableExists('recharge_transactions'),
-      checkTableExists('recharges'),
-      checkTableExists('support_tickets'),
-      checkTableExists('enquiries'),
-    ]);
+  const [
+    hasProfiles,
+    hasUsers,
+    hasPayments,
+    hasPaymentRequests,
+    hasRechargeTxns,
+    hasRecharges,
+    hasSupportTickets,
+    hasEnquiries,
+  ] = await Promise.all([
+    checkTableExists('profiles', force),
+    checkTableExists('users', force),
+    checkTableExists('payments', force),
+    checkTableExists('payment_requests', force),
+    checkTableExists('recharge_transactions', force),
+    checkTableExists('recharges', force),
+    checkTableExists('support_tickets', force),
+    checkTableExists('enquiries', force),
+  ]);
 
   if (hasProfiles) detectedUserTable = 'profiles';
   else if (hasUsers) detectedUserTable = 'users';
@@ -249,7 +358,7 @@ export const adminService = {
   },
 
   /**
-   * Resets table detection cache, useful when user runs migrations
+   * Resets table detection cache, useful when user runs migrations or clicks Refresh Data
    */
   clearTableCache() {
     Object.keys(tableAvailability).forEach((k) => delete tableAvailability[k]);
@@ -257,34 +366,112 @@ export const adminService = {
     detectedPaymentTable = null;
     detectedRechargeTable = null;
     detectedSupportTable = null;
+    refreshPostgrestSchema();
   },
 
   /**
-   * Returns list of core tables that are missing in the Supabase schema cache
+   * Returns availability of all monitored tables in the Supabase schema,
+   * with automatic alias resolution so that if an alias exists (e.g. users for profiles),
+   * both are recognized as available.
    */
-  async getTableStatus(): Promise<{ [tableName: string]: boolean }> {
+  async getTableStatus(force = false): Promise<{ [tableName: string]: boolean }> {
+    if (force) {
+      this.clearTableCache();
+    }
     const tables = [
       'profiles',
+      'users',
       'businesses',
       'plans',
       'subscriptions',
       'payments',
+      'payment_requests',
       'recharge_transactions',
+      'recharges',
       'invoices',
       'support_tickets',
+      'enquiries',
       'admin_activity_logs',
       'app_settings',
-      'landing_page_content',
-      'landing_page_banners',
     ];
 
     const result: { [key: string]: boolean } = {};
     await Promise.all(
       tables.map(async (t) => {
-        result[t] = await checkTableExists(t);
+        result[t] = await checkTableExists(t, force);
       })
     );
+
+    // Cross-resolve aliases so both primary and alternative table keys report available
+    if (result['users']) result['profiles'] = true;
+    if (result['profiles']) result['users'] = true;
+
+    if (result['payment_requests']) result['payments'] = true;
+    if (result['payments']) result['payment_requests'] = true;
+
+    if (result['recharges']) result['recharge_transactions'] = true;
+    if (result['recharge_transactions']) result['recharges'] = true;
+
+    if (result['enquiries']) result['support_tickets'] = true;
+    if (result['support_tickets']) result['enquiries'] = true;
+
     return result;
+  },
+
+  /**
+   * Evaluates whether any REQUIRED core functional table is missing from the Supabase database.
+   * Accurately distinguishes aliases (profiles OR users, payments OR payment_requests, etc.)
+   * and excludes non-blocking logging tables so false alarms are avoided.
+   */
+  async getMissingRequiredTables(force = false): Promise<string[]> {
+    if (!isSupabaseConfigured()) {
+      return ['database_connection'];
+    }
+
+    const status = await this.getTableStatus(force);
+    const missing: string[] = [];
+
+    // 1. Users table (profiles or users)
+    if (!status['profiles'] && !status['users']) {
+      missing.push('profiles');
+    }
+
+    // 2. Businesses table
+    if (!status['businesses']) {
+      missing.push('businesses');
+    }
+
+    // 3. Plans table
+    if (!status['plans']) {
+      missing.push('plans');
+    }
+
+    // 4. Subscriptions table
+    if (!status['subscriptions']) {
+      missing.push('subscriptions');
+    }
+
+    // 5. Payments table (payments or payment_requests)
+    if (!status['payments'] && !status['payment_requests']) {
+      missing.push('payments');
+    }
+
+    // 6. Recharge transactions table (recharge_transactions or recharges)
+    if (!status['recharge_transactions'] && !status['recharges']) {
+      missing.push('recharge_transactions');
+    }
+
+    // 7. Invoices table
+    if (!status['invoices']) {
+      missing.push('invoices');
+    }
+
+    // 8. App Settings table
+    if (!status['app_settings']) {
+      missing.push('app_settings');
+    }
+
+    return missing;
   },
 
   // ----------------------------------------------------
@@ -891,7 +1078,16 @@ export const adminService = {
   // ----------------------------------------------------
   // FREE TRIAL SETTINGS
   // ----------------------------------------------------
-  async getAppSettings(): Promise<AppSettings> {
+  async isAppSettingsTableAvailable(force = false): Promise<boolean> {
+    return checkTableExists('app_settings', force);
+  },
+
+  async refreshTableAvailability(tableName = 'app_settings'): Promise<boolean> {
+    delete tableAvailability[tableName];
+    return checkTableExists(tableName, true);
+  },
+
+  async getAppSettings(forceRecheck = false): Promise<AppSettings> {
     const defaultSettings: AppSettings = {
       free_trial_enabled: true,
       free_trial_days: 15,
@@ -907,15 +1103,25 @@ export const adminService = {
       upi_id: 'Q164166564@ybl',
     };
 
-    if (!isSupabaseConfigured() || !(await checkTableExists('app_settings'))) {
+    if (!isSupabaseConfigured()) {
       return defaultSettings;
     }
-    const supabase = getSupabase();
 
+    const available = await checkTableExists('app_settings', forceRecheck);
+    if (!available) {
+      return defaultSettings;
+    }
+
+    const supabase = getSupabase();
     try {
       const { data, error } = await supabase.from('app_settings').select('*');
-      if (error || !data || data.length === 0) {
-        if (error && isTableMissingError(error)) tableAvailability['app_settings'] = false;
+      if (error) {
+        if (isTableMissingError(error)) {
+          tableAvailability['app_settings'] = false;
+        }
+        return defaultSettings;
+      }
+      if (!data || data.length === 0) {
         return defaultSettings;
       }
 
@@ -998,7 +1204,12 @@ export const adminService = {
 
     const { error } = await supabase.from('app_settings').upsert(rowsToUpsert, { onConflict: 'key' });
     if (error) {
-      if (isTableMissingError(error)) tableAvailability['app_settings'] = false;
+      if (isTableMissingError(error)) {
+        tableAvailability['app_settings'] = false;
+        throw new Error(
+          `Could not find the table public.app_settings in the schema cache. Please execute the SQL migration script in your Supabase SQL Editor.`
+        );
+      }
       throw error;
     }
 

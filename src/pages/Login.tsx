@@ -64,7 +64,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
   const [isReEnrolling, setIsReEnrolling] = useState(false);
   const [showReEnrollConfirm, setShowReEnrollConfirm] = useState(false);
   const [showManualKey, setShowManualKey] = useState(false);
-  const [enrollmentStep, setEnrollmentStep] = useState<'prompt' | 'active'>('prompt');
   const [enrollmentData, setEnrollmentData] = useState<MfaEnrollmentData | null>(null);
   const [loadingEnrollment, setLoadingEnrollment] = useState(false);
   const [enrollmentCode, setEnrollmentCode] = useState('');
@@ -87,12 +86,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
 
   // Focus Enrollment input when entering setup view
   useEffect(() => {
-    if (enrollmentStep === 'active' && enrollmentData) {
+    if ((mfaStatus === 'REQUIRED_ENROLL' || isReEnrolling) && enrollmentData) {
       setTimeout(() => {
         enrollInputRef.current?.focus();
       }, 100);
     }
-  }, [enrollmentStep, enrollmentData]);
+  }, [mfaStatus, isReEnrolling, enrollmentData]);
+
+  // Automatically start TOTP enrollment if MFA setup is required and no enrollment data is loaded yet
+  useEffect(() => {
+    if (user && isAdmin && !isMfaVerified && (mfaStatus === 'REQUIRED_ENROLL' || isReEnrolling)) {
+      if (!enrollmentData && !loadingEnrollment) {
+        handleStartEnrollment();
+      }
+    }
+  }, [user, isAdmin, isMfaVerified, mfaStatus, isReEnrolling, enrollmentData, loadingEnrollment]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +125,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
   const handleVerifyMfa = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mfaCode.trim() || mfaCode.trim().length !== 6) {
-      setMfaError('Please enter a 6-digit verification code.');
+      setMfaError('Enter the 6-digit code from your authenticator app.');
       return;
     }
 
@@ -126,7 +134,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
 
     const res = await verifyMfaCode(mfaCode.trim());
     if (!res.success) {
-      setMfaError(res.error || 'Invalid verification code. Please check your authenticator app.');
+      setMfaError(res.error || 'Invalid verification code. Please try again.');
     }
 
     setVerifyingMfa(false);
@@ -138,9 +146,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
     const res = await startMfaEnrollment();
     if (res.success && res.data) {
       setEnrollmentData(res.data);
-      setEnrollmentStep('active');
     } else {
-      setMfaError(res.error || 'Failed to initiate authenticator setup. Please try again.');
+      setMfaError(res.error || 'Unable to set up two-factor authentication. Please try again.');
     }
     setLoadingEnrollment(false);
   };
@@ -149,7 +156,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
     e.preventDefault();
     if (!enrollmentData) return;
     if (!enrollmentCode.trim() || enrollmentCode.trim().length !== 6) {
-      setMfaError('Please enter the 6-digit code shown in your authenticator app.');
+      setMfaError('Enter the 6-digit code from your authenticator app.');
       return;
     }
 
@@ -161,7 +168,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
       setEnrollmentSuccessMessage(true);
       // AdminApp in App.tsx automatically switches to dashboard once isMfaVerified is true
     } else {
-      setMfaError(res.error || 'Invalid code. Please ensure your device clock is synced.');
+      setMfaError(res.error || 'Invalid verification code. Please try again.');
     }
 
     setConfirmingEnrollment(false);
@@ -173,18 +180,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onOpenSettings }) => {
     setMfaError(null);
     setShowReEnrollConfirm(false);
     setIsReEnrolling(true);
+    setEnrollmentData(null);
+    setEnrollmentCode('');
+    setMfaCode('');
 
     await resetMfaEnrollment();
-    setEnrollmentData(null);
-    setMfaCode('');
 
     const res = await startMfaEnrollment();
     if (res.success && res.data) {
       setEnrollmentData(res.data);
-      setEnrollmentStep('active');
     } else {
-      setMfaError(res.error || 'Failed to generate fresh QR code. Please try again.');
-      setEnrollmentStep('prompt');
+      setMfaError(res.error || 'Unable to set up two-factor authentication. Please try again.');
     }
     setLoadingEnrollment(false);
   };
@@ -388,112 +394,48 @@ WHERE id = '${user.id}';`
                     <CheckCircle2 className="w-9 h-9" />
                   </div>
                   <h2 className="text-lg font-black text-slate-900">
-                    Authenticator successfully enrolled.
+                    Two-factor authentication is enabled.
                   </h2>
                   <p className="text-xs text-slate-600 font-medium">
-                    Two-Factor Authentication is verified. Opening Admin Dashboard...
+                    Google Authenticator enrolled successfully. Opening Admin Dashboard...
                   </p>
                   <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mt-4" />
                 </div>
-              ) : enrollmentStep === 'prompt' ? (
-                <>
-                  <div className="text-center">
-                    <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center mx-auto mb-3 shadow-xs">
-                      <KeyRound className="w-7 h-7" />
-                    </div>
-                    <h2 className="text-lg font-black text-slate-900 tracking-tight">
-                      Secure Your Admin Account
-                    </h2>
-                    <p className="text-xs text-slate-600 mt-2 leading-relaxed">
-                      Admin access requires two-factor authentication. Set up your authenticator app before continuing.
-                    </p>
-                  </div>
-
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs text-slate-700">
-                    <div className="flex items-center gap-2 font-semibold text-slate-900">
-                      <Smartphone className="w-4 h-4 text-blue-600" />
-                      <span>Supported Authenticator Apps</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-normal">
-                      Works with Google Authenticator, Microsoft Authenticator, 1Password, Authy, or any standard TOTP app.
-                    </p>
-                    <div className="pt-1 flex items-center justify-between text-[11px] text-slate-500 font-mono border-t border-slate-200">
-                      <span>Admin Account:</span>
-                      <span className="font-bold text-slate-800">{user.email}</span>
-                    </div>
-                  </div>
-
-                  {mfaError && (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                      <span className="font-semibold">{mfaError}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleStartEnrollment}
-                    disabled={loadingEnrollment}
-                    className="w-full py-3 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {loadingEnrollment ? (
-                      <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <>
-                        <QrCode className="w-4 h-4" />
-                        <span>SET UP AUTHENTICATOR</span>
-                      </>
-                    )}
-                  </button>
-
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                    {isReEnrolling ? (
-                      <button
-                        type="button"
-                        onClick={() => setIsReEnrolling(false)}
-                        className="text-xs font-semibold text-slate-500 hover:text-slate-800 cursor-pointer"
-                      >
-                        &larr; Back to Verification
-                      </button>
-                    ) : (
-                      <span />
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => logout()}
-                      className="text-xs font-semibold text-slate-500 hover:text-rose-600 flex items-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Cancel &amp; Sign Out</span>
-                    </button>
-                  </div>
-                </>
               ) : (
-                /* ACTIVE ENROLLMENT: QR CODE & 6-DIGIT CODE CONFIRMATION */
+                /* SETUP / ENROLLMENT ACTIVE SCREEN */
                 <>
                   <div className="text-center">
                     <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center mx-auto mb-2 shadow-xs">
                       <QrCode className="w-6 h-6" />
                     </div>
-                    <h2 className="text-base font-bold text-slate-900">
-                      Scan QR Code in Authenticator
+                    <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                      Set up two-factor authentication
                     </h2>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Open your authenticator app and scan the code below:
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                      Scan this QR code with your authenticator app, then enter the 6-digit code.
                     </p>
                   </div>
+
+                  {/* LOADING STATE */}
+                  {loadingEnrollment && !enrollmentData && (
+                    <div className="p-8 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center gap-3">
+                      <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs text-slate-600 font-medium">
+                        Generating two-factor authentication QR code...
+                      </p>
+                    </div>
+                  )}
 
                   {/* QR Code Presentation */}
                   {enrollmentData?.qrCode && (
                     <div className="p-4 bg-white border border-slate-200 rounded-2xl flex flex-col items-center justify-center shadow-xs">
                       <img
                         src={getQrSrc(enrollmentData.qrCode)}
-                        alt="TOTP Enrollment QR Code"
+                        alt="Two-factor authentication QR Code"
                         className="w-52 h-52 rounded-lg shadow-xs"
                       />
                       <p className="text-[11px] font-semibold text-slate-600 mt-2 text-center">
-                        Scan this QR code with your authenticator app
+                        Scan this QR code with Google Authenticator
                       </p>
                     </div>
                   )}
@@ -527,7 +469,7 @@ WHERE id = '${user.id}';`
                             {enrollmentData.secret}
                           </div>
                           <p className="text-[10px] text-slate-400 text-center">
-                            In your authenticator, select "Enter a setup key" &bull; Type: Time-based &bull; 6 digits
+                            In Google Authenticator, select "Enter a setup key" &bull; Type: Time-based &bull; 6 digits
                           </p>
                         </div>
                       )}
@@ -537,60 +479,72 @@ WHERE id = '${user.id}';`
                   {mfaError && (
                     <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                      <span className="font-semibold">{mfaError}</span>
+                      <div className="space-y-1 flex-1">
+                        <span className="font-semibold block">{mfaError}</span>
+                        {!enrollmentData && (
+                          <button
+                            type="button"
+                            onClick={handleStartEnrollment}
+                            className="text-xs text-rose-700 underline font-bold cursor-pointer"
+                          >
+                            Try Again
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 
-                  <form onSubmit={handleConfirmEnrollment} className="space-y-3 pt-1">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 text-center">
-                        Enter the 6-digit code generated by your authenticator app
-                      </label>
-                      <input
-                        ref={enrollInputRef}
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={6}
-                        autoComplete="one-time-code"
-                        required
-                        value={enrollmentCode}
-                        onChange={(e) => setEnrollmentCode(e.target.value.replace(/\D/g, ''))}
-                        placeholder="000000"
-                        className="w-full text-center tracking-[0.4em] font-mono font-bold text-2xl py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                      />
-                    </div>
+                  {/* 6-digit confirmation form */}
+                  {enrollmentData && (
+                    <form onSubmit={handleConfirmEnrollment} className="space-y-3 pt-1">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5 text-center">
+                          Enter the 6-digit code from your authenticator app
+                        </label>
+                        <input
+                          ref={enrollInputRef}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={6}
+                          autoComplete="one-time-code"
+                          required
+                          value={enrollmentCode}
+                          onChange={(e) => setEnrollmentCode(e.target.value.replace(/\D/g, ''))}
+                          placeholder="000000"
+                          className="w-full text-center tracking-[0.4em] font-mono font-bold text-2xl py-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        />
+                      </div>
 
-                    <button
-                      type="submit"
-                      disabled={confirmingEnrollment || enrollmentCode.length !== 6}
-                      className="w-full py-2.5 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      {confirmingEnrollment ? (
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Verify &amp; Enable 2FA</span>
-                        </>
-                      )}
-                    </button>
-                  </form>
+                      <button
+                        type="submit"
+                        disabled={confirmingEnrollment || enrollmentCode.length !== 6}
+                        className="w-full py-2.5 px-4 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {confirmingEnrollment ? (
+                          <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Verify &amp; Enable 2FA</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  )}
 
                   <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isReEnrolling) {
-                          setIsReEnrolling(false);
-                        } else {
-                          setEnrollmentStep('prompt');
-                        }
-                      }}
-                      className="font-semibold text-slate-500 hover:text-slate-900 cursor-pointer"
-                    >
-                      &larr; Back
-                    </button>
+                    {isReEnrolling ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsReEnrolling(false)}
+                        className="font-semibold text-slate-500 hover:text-slate-900 cursor-pointer"
+                      >
+                        &larr; Back to Verification
+                      </button>
+                    ) : (
+                      <span />
+                    )}
 
                     <button
                       type="button"
@@ -634,7 +588,7 @@ WHERE id = '${user.id}';`
                 Two-Factor Security Verification
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                Enter your 6-digit security code from your authenticator app.
+                Enter the 6-digit code from your authenticator app.
               </p>
             </div>
 
@@ -699,12 +653,23 @@ WHERE id = '${user.id}';`
               </button>
             </form>
 
-            {/* Defense In Depth Note */}
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 flex items-center justify-between">
-              <span>Security Assurance:</span>
-              <span className="font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                AAL2 Mandatory
-              </span>
+            {/* RECOVERY & QR CODE SCAN SECTION */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                <QrCode className="w-4 h-4 text-blue-600" />
+                <span>Need to scan the QR code again?</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                If you haven't added this account to Google Authenticator yet, or need to set up a new device, reset your setup to display the QR code.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowReEnrollConfirm(true)}
+                className="w-full py-2 px-3 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Reset MFA Setup &amp; Scan New QR Code</span>
+              </button>
             </div>
 
             {/* Footer Actions */}
@@ -716,7 +681,7 @@ WHERE id = '${user.id}';`
                 title="Reset TOTP factor and generate fresh QR code"
               >
                 <RefreshCw className="w-3 h-3" />
-                <span>Re-enroll Authenticator</span>
+                <span>Reset MFA Setup</span>
               </button>
 
               <button
@@ -738,9 +703,9 @@ WHERE id = '${user.id}';`
                 <RefreshCw className="w-6 h-6" />
               </div>
               <div className="text-center space-y-1">
-                <h3 className="text-base font-bold text-slate-900">Re-enroll Authenticator</h3>
+                <h3 className="text-base font-bold text-slate-900">Reset Two-Factor Authentication Setup?</h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Need to scan a new QR code or lost your authenticator device? This will safely remove your previous authenticator factor and generate a fresh QR code.
+                  This will safely remove your previous authenticator configuration from Supabase and generate a brand-new QR code for Google Authenticator.
                 </p>
               </div>
 
@@ -763,7 +728,7 @@ WHERE id = '${user.id}';`
                   ) : (
                     <>
                       <QrCode className="w-3.5 h-3.5" />
-                      <span>Confirm &amp; Re-enroll</span>
+                      <span>Confirm &amp; Generate QR</span>
                     </>
                   )}
                 </button>

@@ -237,13 +237,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (isAal2) {
       status = 'VERIFIED';
-    } else if (verifiedTotpFactor || nextLvl === 'aal2') {
+    } else if (verifiedTotpFactor) {
       status = 'REQUIRED_VERIFY';
     } else {
       status = 'REQUIRED_ENROLL';
     }
 
-    const primaryFactorId = verifiedTotpFactor?.id || (factorsList.length > 0 ? factorsList[0].id : null);
+    const primaryFactorId = verifiedTotpFactor?.id || null;
 
     setMfaLevel(currentLvl);
     setIsMfaVerified(isAal2);
@@ -581,10 +581,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (verifyErr) {
-        let msg = 'Invalid or expired 6-digit code. Please check your authenticator app.';
-        if (verifyErr.message.toLowerCase().includes('expired')) {
-          msg = 'The verification code has expired. Please enter the current code from your authenticator app.';
-        }
+        const msg = 'Invalid verification code. Please try again.';
         setError(msg);
         return { success: false, error: msg };
       }
@@ -612,7 +609,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMfaLevel('aal2');
       return { success: true };
     } catch (err: any) {
-      const msg = sanitizeErrorMessage(err, 'Failed to verify MFA security code.');
+      const msg = sanitizeErrorMessage(err, 'Invalid verification code. Please try again.');
       setError(msg);
       return { success: false, error: msg };
     }
@@ -628,22 +625,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const supabase = getSupabase();
 
-      // Step 1: Clean up any stale or unverified factors
+      // Step 1: Clean up any stale unverified factors only (preserve valid verified factors)
       try {
         const { data: fData } = await supabase.auth.mfa.listFactors();
         if (fData?.all && fData.all.length > 0) {
           for (const f of fData.all) {
-            if (
-              f.status === 'unverified' ||
-              f.factor_type === 'totp' ||
-              f.friendly_name === 'Hishab Admin Authenticator' ||
-              f.friendly_name?.toLowerCase().includes('hishab')
-            ) {
+            if (f.status === 'unverified') {
               try {
                 await supabase.auth.mfa.unenroll({ factorId: f.id });
               } catch (uErr) {
-                // Ignore if server prevents unenrolling at current AAL
-                console.warn('Cleanup unenroll notice for factor:', f.id, uErr);
+                console.warn('Cleanup unverified factor notice:', f.id, uErr);
               }
             }
           }
@@ -665,11 +656,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (enrollRes.error.message.toLowerCase().includes('already exists') ||
           enrollRes.error.message.toLowerCase().includes('friendly name'))
       ) {
-        // Attempt targeted unenroll of the exact conflicting factor
+        // Attempt targeted unenroll of the exact conflicting factor if unverified
         try {
           const { data: fData } = await supabase.auth.mfa.listFactors();
           const existing = fData?.all?.find(
-            (f) => f.friendly_name === 'Hishab Admin Authenticator' || f.factor_type === 'totp'
+            (f) => (f.friendly_name === 'Hishab Admin Authenticator' || f.factor_type === 'totp') && f.status === 'unverified'
           );
           if (existing) {
             await supabase.auth.mfa.unenroll({ factorId: existing.id });
@@ -683,7 +674,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // ignore
         }
 
-        // If still blocked by duplicate name, use timestamped friendly name so enrollment NEVER fails
+        // If still blocked by duplicate name, use unique friendly name so enrollment NEVER fails
         if (enrollRes.error && enrollRes.error.message.toLowerCase().includes('already exists')) {
           const uniqueFriendlyName = `Hishab Admin Authenticator ${Math.floor(Date.now() / 1000).toString().slice(-4)}`;
           enrollRes = await supabase.auth.mfa.enroll({
@@ -697,7 +688,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error: enrollErr } = enrollRes;
 
       if (enrollErr || !data || !data.totp) {
-        const msg = enrollErr?.message || 'Failed to start MFA enrollment.';
+        const msg = 'Unable to set up two-factor authentication. Please try again.';
         setError(msg);
         return { success: false, error: msg };
       }
@@ -776,7 +767,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (verifyErr) {
-        const msg = 'Invalid code. Please ensure your device clock is synchronized and try again.';
+        const msg = 'Invalid verification code. Please try again.';
         setError(msg);
         return { success: false, error: msg };
       }
@@ -811,7 +802,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { success: true };
     } catch (err: any) {
-      const msg = sanitizeErrorMessage(err, 'Failed to activate two-factor authentication.');
+      const msg = sanitizeErrorMessage(err, 'Unable to set up two-factor authentication. Please try again.');
       setError(msg);
       return { success: false, error: msg };
     }

@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS public.app_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -244,18 +245,21 @@ BEGIN
   END IF;
 
   RETURN (
-    EXISTS (
+    (to_regclass('public.admin_users') IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.admin_users
       WHERE user_id = auth.uid() AND (role = 'ADMIN' OR role = 'SUPER_ADMIN')
-    ) OR
-    EXISTS (
+    )) OR
+    (to_regclass('public.profiles') IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.profiles
       WHERE id = auth.uid() AND (role = 'ADMIN' OR role = 'SUPER_ADMIN')
-    ) OR
+    )) OR
     (auth.jwt() -> 'app_metadata' ->> 'role') IN ('ADMIN', 'SUPER_ADMIN')
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Public read policy for app_settings (allows new user signup to know default trial duration)
+CREATE POLICY public_read_settings ON public.app_settings FOR SELECT TO public USING (true);
 
 -- Admin access policy for all tables
 CREATE POLICY admin_all_profiles ON public.profiles FOR ALL TO authenticated USING (public.is_admin());
