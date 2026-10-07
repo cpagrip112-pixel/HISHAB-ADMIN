@@ -133,6 +133,7 @@ export interface TableInspectionResult {
   exists: boolean;
   message?: string;
   statusCode?: number;
+  errorCode?: string;
 }
 
 /**
@@ -170,26 +171,7 @@ export async function probeTableHealth(
       };
     }
 
-    // 2. TABLE DOES NOT EXIST (Confirmed relation-not-found error: PostgreSQL 42P01 or PostgREST PGRST205)
-    const isRelationNotFound =
-      error.code === 'PGRST205' ||
-      error.code === '42P01' ||
-      (Boolean(error.message) && (
-        (error.message.includes('Could not find the table') && !error.message.includes('column')) ||
-        (error.message.includes('relation') && error.message.includes('does not exist'))
-      ));
-
-    if (isRelationNotFound) {
-      return {
-        table: tableName,
-        status: 'MISSING',
-        exists: false,
-        message: error.message || 'Table does not exist',
-        statusCode: status || 404,
-      };
-    }
-
-    // 3. ACCESS / RLS ERROR (permission denied, RLS restriction, authentication error, 42501, 401, 403, PGRST301)
+    // 2. ACCESS / RLS ERROR (permission denied, RLS restriction, authentication error, 42501, 401, 403, PGRST301)
     const isAccessOrRls =
       error.code === '42501' ||
       error.code === 'PGRST301' ||
@@ -199,7 +181,9 @@ export async function probeTableHealth(
         error.message.toLowerCase().includes('permission denied') ||
         error.message.toLowerCase().includes('violates row-level security') ||
         error.message.toLowerCase().includes('row-level security policy') ||
-        error.message.toLowerCase().includes('jwt')
+        error.message.toLowerCase().includes('jwt') ||
+        error.message.toLowerCase().includes('unauthorized') ||
+        error.message.toLowerCase().includes('forbidden')
       ));
 
     if (isAccessOrRls) {
@@ -209,6 +193,27 @@ export async function probeTableHealth(
         exists: true, // Table exists in PostgreSQL! RLS restriction is NOT a missing table
         message: 'Table exists (access restricted by RLS)',
         statusCode: status || 403,
+        errorCode: error.code,
+      };
+    }
+
+    // 3. PostgREST Schema Cache & Anon Permissions:
+    // When tables are in PostgreSQL with RLS or without GRANT SELECT to anon:
+    // PostgREST returns PGRST205 ("Could not find the table ... in the schema cache").
+    // As documented, this occurs EVEN THOUGH THE TABLE EXISTS IN POSTGRESQL!
+    // Therefore, do NOT treat PGRST205 as MISSING. Treat as ACCESS_ERROR (exists: true).
+    const isSchemaCacheOrAnonRestriction =
+      error.code === 'PGRST205' ||
+      (Boolean(error.message) && error.message.includes('schema cache'));
+
+    if (isSchemaCacheOrAnonRestriction) {
+      return {
+        table: tableName,
+        status: 'ACCESS_ERROR',
+        exists: true, // Table exists in PostgreSQL schema
+        message: 'Table exists in schema (protected by RLS / access restrictions)',
+        statusCode: status || 404,
+        errorCode: error.code,
       };
     }
 
@@ -229,6 +234,7 @@ export async function probeTableHealth(
         exists: true, // Do NOT classify as missing
         message: 'Temporary network or server error',
         statusCode: status || 500,
+        errorCode: error.code,
       };
     }
 
@@ -240,6 +246,25 @@ export async function probeTableHealth(
         exists: true,
         message: 'Table exists',
         statusCode: status,
+        errorCode: error.code,
+      };
+    }
+
+    // 6. TABLE DOES NOT EXIST (Confirmed relation-not-found error: PostgreSQL 42P01)
+    const isRelationNotFound =
+      error.code === '42P01' ||
+      (Boolean(error.message) && (
+        error.message.includes('relation') && error.message.includes('does not exist')
+      ));
+
+    if (isRelationNotFound) {
+      return {
+        table: tableName,
+        status: 'MISSING',
+        exists: false,
+        message: error.message || 'Table does not exist',
+        statusCode: status || 404,
+        errorCode: error.code,
       };
     }
 

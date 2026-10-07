@@ -1,4 +1,5 @@
 import { getSupabase, isSupabaseConfigured, probeTableHealth, refreshPostgrestSchema } from '../lib/supabase';
+import { databaseHealthService } from './databaseHealthService';
 import {
   isValidUuid,
   sanitizeSafeUrl,
@@ -228,8 +229,6 @@ CREATE POLICY "Admin write app_settings"
   WITH CHECK (public.is_admin());
 `;
 
-// Cache table existence so we do not repeatedly spam PostgREST for missing tables (PGRST205)
-const tableAvailability: { [tableName: string]: boolean } = {};
 
 let detectedUserTable: 'profiles' | 'users' | null = null;
 let detectedPaymentTable: 'payments' | 'payment_requests' | null = null;
@@ -269,70 +268,55 @@ function isTableMissingError(err: any): boolean {
     return false;
   }
 
-  // 4. Exact table missing indicators from PostgREST / PostgreSQL
-  return (
+  // 4. Schema cache or PostgREST anon restrictions (PGRST205) do NOT mean the table is missing from PostgreSQL
+  if (
     err.code === 'PGRST205' ||
+    (err.message && err.message.includes('schema cache'))
+  ) {
+    return false;
+  }
+
+  // 5. Exact confirmed table missing indicators from PostgreSQL (42P01)
+  return (
     err.code === '42P01' ||
-    (Boolean(err.message) && (
-      (err.message.includes('Could not find the table') && !err.message.includes('column')) ||
-      (err.message.includes('relation') && err.message.includes('does not exist'))
-    ))
+    (Boolean(err.message) &&
+      err.message.includes('relation') &&
+      err.message.includes('does not exist'))
   );
 }
 
 async function checkTableExists(tableName: string, force = false): Promise<boolean> {
-  if (!force && tableAvailability[tableName] !== undefined) {
-    return tableAvailability[tableName];
-  }
-
   if (!isSupabaseConfigured()) {
-    tableAvailability[tableName] = false;
     return false;
   }
-
+  const health = await databaseHealthService.checkHealth(force);
+  if (health.tables[tableName] !== undefined) {
+    return health.tables[tableName].exists;
+  }
   const supabase = getSupabase();
   const res = await probeTableHealth(supabase, tableName);
-  tableAvailability[tableName] = res.exists;
   return res.exists;
 }
 
 async function detectTables(force = false) {
   if (!isSupabaseConfigured()) return;
 
-  const [
-    hasProfiles,
-    hasUsers,
-    hasPayments,
-    hasPaymentRequests,
-    hasRechargeTxns,
-    hasRecharges,
-    hasSupportTickets,
-    hasEnquiries,
-  ] = await Promise.all([
-    checkTableExists('profiles', force),
-    checkTableExists('users', force),
-    checkTableExists('payments', force),
-    checkTableExists('payment_requests', force),
-    checkTableExists('recharge_transactions', force),
-    checkTableExists('recharges', force),
-    checkTableExists('support_tickets', force),
-    checkTableExists('enquiries', force),
-  ]);
+  const health = await databaseHealthService.checkHealth(force);
 
-  if (hasProfiles) detectedUserTable = 'profiles';
-  else if (hasUsers) detectedUserTable = 'users';
+  if (health.tables['profiles']?.exists) detectedUserTable = 'profiles';
+  else if (health.tables['users']?.exists) detectedUserTable = 'users';
   else detectedUserTable = 'profiles';
 
-  if (hasPayments) detectedPaymentTable = 'payments';
-  else if (hasPaymentRequests) detectedPaymentTable = 'payment_requests';
+  if (health.tables['payments']?.exists) detectedPaymentTable = 'payments';
+  else if (health.tables['payment_requests']?.exists) detectedPaymentTable = 'payment_requests';
   else detectedPaymentTable = 'payments';
 
-  if (hasRechargeTxns) detectedRechargeTable = 'recharge_transactions';
-  else if (hasRecharges) detectedRechargeTable = 'recharges';
+  if (health.tables['recharge_transactions']?.exists) detectedRechargeTable = 'recharge_transactions';
+  else if (health.tables['recharges']?.exists) detectedRechargeTable = 'recharges';
   else detectedRechargeTable = 'recharge_transactions';
 
-  if (hasSupportTickets) detectedSupportTable = 'support_tickets';
-  else if (hasEnquiries) detectedSupportTable = 'enquiries';
+  if (health.tables['support_tickets']?.exists) detectedSupportTable = 'support_tickets';
+  else if (health.tables['enquiries']?.exists) detectedSupportTable = 'enquiries';
   else detectedSupportTable = 'support_tickets';
 }
 
@@ -361,7 +345,7 @@ export const adminService = {
    * Resets table detection cache, useful when user runs migrations or clicks Refresh Data
    */
   clearTableCache() {
-    Object.keys(tableAvailability).forEach((k) => delete tableAvailability[k]);
+    databaseHealthService.clearCache();
     detectedUserTable = null;
     detectedPaymentTable = null;
     detectedRechargeTable = null;
@@ -370,108 +354,25 @@ export const adminService = {
   },
 
   /**
-   * Returns availability of all monitored tables in the Supabase schema,
-   * with automatic alias resolution so that if an alias exists (e.g. users for profiles),
-   * both are recognized as available.
+   * Returns authoritative availability of all monitored tables in the Supabase schema.
+   * Leverages the unified databaseHealthService single-source-of-truth.
    */
   async getTableStatus(force = false): Promise<{ [tableName: string]: boolean }> {
-    if (force) {
-      this.clearTableCache();
-    }
-    const tables = [
-      'profiles',
-      'users',
-      'businesses',
-      'plans',
-      'subscriptions',
-      'payments',
-      'payment_requests',
-      'recharge_transactions',
-      'recharges',
-      'invoices',
-      'support_tickets',
-      'enquiries',
-      'admin_activity_logs',
-      'app_settings',
-    ];
-
+    const health = await databaseHealthService.checkHealth(force);
     const result: { [key: string]: boolean } = {};
-    await Promise.all(
-      tables.map(async (t) => {
-        result[t] = await checkTableExists(t, force);
-      })
-    );
-
-    // Cross-resolve aliases so both primary and alternative table keys report available
-    if (result['users']) result['profiles'] = true;
-    if (result['profiles']) result['users'] = true;
-
-    if (result['payment_requests']) result['payments'] = true;
-    if (result['payments']) result['payment_requests'] = true;
-
-    if (result['recharges']) result['recharge_transactions'] = true;
-    if (result['recharge_transactions']) result['recharges'] = true;
-
-    if (result['enquiries']) result['support_tickets'] = true;
-    if (result['support_tickets']) result['enquiries'] = true;
-
+    Object.entries(health.tables).forEach(([table, info]) => {
+      result[table] = info.exists;
+    });
     return result;
   },
 
   /**
    * Evaluates whether any REQUIRED core functional table is missing from the Supabase database.
-   * Accurately distinguishes aliases (profiles OR users, payments OR payment_requests, etc.)
-   * and excludes non-blocking logging tables so false alarms are avoided.
+   * Utilizes the authoritative databaseHealthService to ensure Dashboard and Schema Inspector never disagree.
    */
   async getMissingRequiredTables(force = false): Promise<string[]> {
-    if (!isSupabaseConfigured()) {
-      return ['database_connection'];
-    }
-
-    const status = await this.getTableStatus(force);
-    const missing: string[] = [];
-
-    // 1. Users table (profiles or users)
-    if (!status['profiles'] && !status['users']) {
-      missing.push('profiles');
-    }
-
-    // 2. Businesses table
-    if (!status['businesses']) {
-      missing.push('businesses');
-    }
-
-    // 3. Plans table
-    if (!status['plans']) {
-      missing.push('plans');
-    }
-
-    // 4. Subscriptions table
-    if (!status['subscriptions']) {
-      missing.push('subscriptions');
-    }
-
-    // 5. Payments table (payments or payment_requests)
-    if (!status['payments'] && !status['payment_requests']) {
-      missing.push('payments');
-    }
-
-    // 6. Recharge transactions table (recharge_transactions or recharges)
-    if (!status['recharge_transactions'] && !status['recharges']) {
-      missing.push('recharge_transactions');
-    }
-
-    // 7. Invoices table
-    if (!status['invoices']) {
-      missing.push('invoices');
-    }
-
-    // 8. App Settings table
-    if (!status['app_settings']) {
-      missing.push('app_settings');
-    }
-
-    return missing;
+    const health = await databaseHealthService.checkHealth(force);
+    return health.missingRequiredTables;
   },
 
   // ----------------------------------------------------
@@ -513,7 +414,6 @@ export const adminService = {
         .limit(limit);
 
       if (error) {
-        if (isTableMissingError(error)) tableAvailability['admin_activity_logs'] = false;
         return [];
       }
       return data || [];
@@ -714,7 +614,6 @@ export const adminService = {
 
       const { data, count, error } = await query;
       if (error) {
-        if (isTableMissingError(error)) tableAvailability[userTable] = false;
         return { users: [], totalCount: 0 };
       }
 
@@ -891,7 +790,6 @@ export const adminService = {
         .order('display_order', { ascending: true, nullsFirst: false });
 
       if (error) {
-        if (isTableMissingError(error)) tableAvailability['plans'] = false;
         return [];
       }
       if (!data || data.length === 0) return [];
@@ -994,7 +892,7 @@ export const adminService = {
     try {
       const { data, error } = await supabase.from('plans').insert(defaultPlans).select('*');
       if (error) throw error;
-      tableAvailability['plans'] = true;
+      databaseHealthService.clearCache();
       await this.logActivity('Seeded 3 standard plans: Monthly, 2 Years, 3 Years');
       return (data || []).map((p: any, idx: number) => ({
         id: p.id,
@@ -1083,7 +981,7 @@ export const adminService = {
   },
 
   async refreshTableAvailability(tableName = 'app_settings'): Promise<boolean> {
-    delete tableAvailability[tableName];
+    databaseHealthService.clearCache();
     return checkTableExists(tableName, true);
   },
 
@@ -1116,9 +1014,6 @@ export const adminService = {
     try {
       const { data, error } = await supabase.from('app_settings').select('*');
       if (error) {
-        if (isTableMissingError(error)) {
-          tableAvailability['app_settings'] = false;
-        }
         return defaultSettings;
       }
       if (!data || data.length === 0) {
@@ -1205,7 +1100,6 @@ export const adminService = {
     const { error } = await supabase.from('app_settings').upsert(rowsToUpsert, { onConflict: 'key' });
     if (error) {
       if (isTableMissingError(error)) {
-        tableAvailability['app_settings'] = false;
         throw new Error(
           `Could not find the table public.app_settings in the schema cache. Please execute the SQL migration script in your Supabase SQL Editor.`
         );
@@ -1213,7 +1107,6 @@ export const adminService = {
       throw error;
     }
 
-    tableAvailability['app_settings'] = true;
     await this.logActivity(`Updated free trial settings: ${duration} ${unit} (${calculatedDays} days total)`, null, {
       enabled: settings.free_trial_enabled,
       duration,
@@ -1331,7 +1224,6 @@ export const adminService = {
         description: 'Draft content for Hishab Landing Page',
         updated_at: now,
       });
-      tableAvailability['app_settings'] = true;
     } catch {
       // ignore
     }
@@ -1378,7 +1270,6 @@ export const adminService = {
         description: 'Published authoritative content for Hishab Landing Page',
         updated_at: now,
       });
-      tableAvailability['app_settings'] = true;
     } catch (err: any) {
       throw err;
     }
@@ -1636,9 +1527,6 @@ export const adminService = {
 
       const { data, count, error } = await query;
       if (error) {
-        if (isTableMissingError(error)) {
-          tableAvailability[paymentTable] = false;
-        }
         return { payments: [], totalCount: 0 };
       }
 
@@ -1844,7 +1732,6 @@ export const adminService = {
 
       const { data, count, error } = await query;
       if (error) {
-        if (isTableMissingError(error)) tableAvailability['subscriptions'] = false;
         return { subscriptions: [], totalCount: 0 };
       }
 
@@ -2014,7 +1901,6 @@ export const adminService = {
 
       const { data, count, error } = await query;
       if (error) {
-        if (isTableMissingError(error)) tableAvailability['businesses'] = false;
         return { businesses: [], totalCount: 0 };
       }
 
@@ -2097,7 +1983,6 @@ export const adminService = {
 
       const { data, count, error } = await query;
       if (error) {
-        if (isTableMissingError(error)) tableAvailability[rechargeTable] = false;
         return { recharges: [], totalCount: 0 };
       }
 
@@ -2176,7 +2061,6 @@ export const adminService = {
 
       const { data, count, error } = await query;
       if (error) {
-        if (isTableMissingError(error)) tableAvailability['invoices'] = false;
         return { invoices: [], totalCount: 0 };
       }
 
@@ -2258,7 +2142,6 @@ export const adminService = {
 
       const { data, count, error } = await query;
       if (error) {
-        if (isTableMissingError(error)) tableAvailability[supportTable] = false;
         return { tickets: [], totalCount: 0 };
       }
 

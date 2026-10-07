@@ -19,6 +19,7 @@ import {
   clearCustomSupabaseCredentials,
   isSupabaseConfigured,
 } from '../lib/supabase';
+import { databaseHealthService } from '../services/databaseHealthService';
 
 export const SettingsPage: React.FC = () => {
   const [credentials, setCredentials] = useState(getSupabaseCredentials());
@@ -39,6 +40,9 @@ export const SettingsPage: React.FC = () => {
     try {
       const res = await testSupabaseConnection(url, key);
       setTestResult(res);
+      // Synchronize unified databaseHealthService cache
+      databaseHealthService.clearCache();
+      await databaseHealthService.checkHealth(true);
     } finally {
       setTesting(false);
     }
