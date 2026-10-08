@@ -1,6 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Tag, Check, Star, RefreshCw, AlertCircle, Save, Plus } from 'lucide-react';
-import { adminService } from '../services/adminService';
+import {
+  Tag,
+  Check,
+  Star,
+  RefreshCw,
+  AlertCircle,
+  Save,
+  Plus,
+  Database,
+  Copy,
+  Code,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+import { adminService, PLANS_SQL_MIGRATION } from '../services/adminService';
 import { PlanRecord } from '../types';
 
 export const PlansPricingPage: React.FC = () => {
@@ -9,6 +23,10 @@ export const PlansPricingPage: React.FC = () => {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isTableAvailable, setIsTableAvailable] = useState<boolean | null>(null);
+  const [rechecking, setRechecking] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+  const [showSqlCode, setShowSqlCode] = useState(false);
 
   // Editable local state per plan
   const [editedPlans, setEditedPlans] = useState<{ [id: string]: Partial<PlanRecord> }>({});
@@ -26,35 +44,70 @@ export const PlansPricingPage: React.FC = () => {
     'Unlimited Staff Accounts',
   ];
 
-  const fetchPlans = async () => {
+  const fetchPlans = async (forceRecheck = false) => {
     setLoading(true);
     setErrorMessage(null);
     try {
-      const data = await adminService.getPlans();
-      setPlans(data);
-      // Initialize edit states
-      const stateMap: { [id: string]: Partial<PlanRecord> } = {};
-      data.forEach((p) => {
-        stateMap[p.id] = { ...p };
-      });
-      setEditedPlans(stateMap);
+      const tableReady = await adminService.isPlansTableAvailable(forceRecheck);
+      setIsTableAvailable(tableReady);
+
+      if (tableReady) {
+        const data = await adminService.getPlans(forceRecheck);
+        setPlans(data);
+        // Initialize edit states
+        const stateMap: { [id: string]: Partial<PlanRecord> } = {};
+        data.forEach((p) => {
+          stateMap[p.id] = { ...p };
+        });
+        setEditedPlans(stateMap);
+      } else {
+        setPlans([]);
+      }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to load plans from Supabase');
+      setErrorMessage(err?.message || 'Failed to check plans schema in Supabase');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPlans();
+    fetchPlans(true);
   }, []);
+
+  const handleRecheckSchema = async () => {
+    setRechecking(true);
+    setErrorMessage(null);
+    try {
+      const ready = await adminService.isPlansTableAvailable(true);
+      setIsTableAvailable(ready);
+      if (ready) {
+        await fetchPlans(true);
+        setSuccessMessage('Successfully connected to public.plans table in Supabase!');
+        setTimeout(() => setSuccessMessage(null), 4000);
+      } else {
+        setErrorMessage(
+          'Table public.plans is still not detected in Supabase. Please execute the SQL migration in your Supabase SQL Editor and try again.'
+        );
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Error checking table schema');
+    } finally {
+      setRechecking(false);
+    }
+  };
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(PLANS_SQL_MIGRATION);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
 
   const handleSeedDefaults = async () => {
     setLoading(true);
     setErrorMessage(null);
     try {
       await adminService.seedDefaultPlans();
-      await fetchPlans();
+      await fetchPlans(true);
       setSuccessMessage('Created the 3 required plans in Supabase: Monthly, 2 Years, 3 Years.');
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
@@ -143,8 +196,21 @@ export const PlansPricingPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {isTableAvailable === true && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Supabase public.plans Active
+            </span>
+          )}
+          {isTableAvailable === false && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <Database className="w-3.5 h-3.5 text-amber-600" />
+              Table Setup Required
+            </span>
+          )}
+
           <button
-            onClick={fetchPlans}
+            onClick={() => fetchPlans(true)}
             disabled={loading}
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
           >
@@ -153,6 +219,57 @@ export const PlansPricingPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Missing public.plans Warning Banner */}
+      {isTableAvailable === false && (
+        <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-5 shadow-2xs space-y-4 text-amber-900">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h3 className="text-xs font-bold text-amber-950 uppercase tracking-wide">
+                Database Migration Required: public.plans
+              </h3>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                The <code className="font-mono bg-amber-100/80 px-1 py-0.5 rounded font-semibold">public.plans</code> table has not been created yet in your connected Supabase project. To manage subscription tiers and feed dynamic pricing to the Hishab User Website, execute the SQL migration below in your Supabase SQL Editor.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <button
+              onClick={handleCopySql}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-2xs transition-colors cursor-pointer"
+            >
+              {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedSql ? 'SQL COPIED TO CLIPBOARD!' : 'COPY SQL MIGRATION SCRIPT'}</span>
+            </button>
+
+            <button
+              onClick={handleRecheckSchema}
+              disabled={rechecking}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 rounded-lg font-semibold text-xs border border-amber-300 shadow-2xs transition-colors cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${rechecking ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
+              <span>{rechecking ? 'Checking Supabase...' : 'Recheck Schema'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowSqlCode(!showSqlCode)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 hover:text-amber-950 ml-auto cursor-pointer"
+            >
+              <Code className="w-3.5 h-3.5" />
+              <span>{showSqlCode ? 'Hide SQL' : 'View SQL Code'}</span>
+              {showSqlCode ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {showSqlCode && (
+            <div className="mt-3 bg-slate-950 text-slate-300 rounded-xl p-4 font-mono text-[11px] overflow-x-auto max-h-64 border border-slate-800">
+              <pre>{PLANS_SQL_MIGRATION}</pre>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Alerts */}
       {successMessage && (
@@ -175,8 +292,8 @@ export const PlansPricingPage: React.FC = () => {
           <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
           <span className="text-xs font-medium">Fetching real plans from Supabase...</span>
         </div>
-      ) : plans.length === 0 ? (
-        <div className="p-12 text-center bg-white rounded-xl border border-slate-200">
+      ) : isTableAvailable === false ? null : plans.length === 0 ? (
+        <div className="p-12 text-center bg-white rounded-xl border border-slate-200 shadow-2xs">
           <Tag className="w-10 h-10 text-slate-400 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-900">
             No plans configured in Supabase yet

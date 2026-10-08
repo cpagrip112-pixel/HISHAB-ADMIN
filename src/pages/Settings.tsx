@@ -110,10 +110,14 @@ CREATE TABLE IF NOT EXISTS public.plans (
   price NUMERIC NOT NULL,
   duration TEXT NOT NULL,
   duration_months INTEGER NOT NULL DEFAULT 1,
+  duration_value INTEGER DEFAULT 1,
+  duration_unit TEXT DEFAULT 'months',
   description TEXT,
   features JSONB DEFAULT '[]'::jsonb,
+  button_label TEXT DEFAULT 'Get Started',
   is_active BOOLEAN DEFAULT true,
   is_popular BOOLEAN DEFAULT false,
+  display_order INTEGER DEFAULT 1,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -262,8 +266,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Public read policy for app_settings (allows new user signup to know default trial duration)
+-- Public read policy for app_settings & plans (allows User Website & new users to read active plans and trial duration)
 CREATE POLICY public_read_settings ON public.app_settings FOR SELECT TO public USING (true);
+CREATE POLICY public_read_plans ON public.plans FOR SELECT TO public USING (true);
 
 -- Admin access policy for all tables
 CREATE POLICY admin_all_profiles ON public.profiles FOR ALL TO authenticated USING (public.is_admin());

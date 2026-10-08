@@ -229,6 +229,149 @@ CREATE POLICY "Admin write app_settings"
   WITH CHECK (public.is_admin());
 `;
 
+export const PLANS_SQL_MIGRATION = `-- ==============================================================================
+-- HISHAB DATABASE MIGRATION: public.plans
+-- Subscription Plans & Pricing Configuration
+-- ==============================================================================
+
+-- 1. Create public.plans table with exact Hishab architecture specifications
+CREATE TABLE IF NOT EXISTS public.plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  price NUMERIC NOT NULL,
+  duration TEXT NOT NULL,
+  duration_months INTEGER NOT NULL DEFAULT 1,
+  duration_value INTEGER DEFAULT 1,
+  duration_unit TEXT DEFAULT 'months',
+  description TEXT,
+  features JSONB DEFAULT '[]'::jsonb,
+  button_label TEXT DEFAULT 'Get Started',
+  is_active BOOLEAN DEFAULT true,
+  is_popular BOOLEAN DEFAULT false,
+  display_order INTEGER DEFAULT 1,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Insert Exactly 3 Required Standard Plans if not already present
+-- Preserves existing plans and prevents duplicates
+INSERT INTO public.plans (
+  name,
+  price,
+  duration,
+  duration_months,
+  duration_value,
+  duration_unit,
+  description,
+  features,
+  button_label,
+  is_active,
+  is_popular,
+  display_order
+)
+SELECT
+  'Monthly',
+  299,
+  '1 Month',
+  1,
+  1,
+  'months',
+  'Flexible monthly billing plan for growing shops',
+  '["Billing", "Invoices", "Products", "Customers", "Reports", "Stock"]'::jsonb,
+  'Start 15-Day Free Trial',
+  true,
+  false,
+  1
+WHERE NOT EXISTS (SELECT 1 FROM public.plans WHERE name = 'Monthly');
+
+INSERT INTO public.plans (
+  name,
+  price,
+  duration,
+  duration_months,
+  duration_value,
+  duration_unit,
+  description,
+  features,
+  button_label,
+  is_active,
+  is_popular,
+  display_order
+)
+SELECT
+  '2 Years',
+  3999,
+  '2 Years',
+  24,
+  2,
+  'years',
+  'Best value for established businesses with long-term savings',
+  '["Billing", "Invoices", "Products", "Customers", "Reports", "Stock", "Priority Support"]'::jsonb,
+  'Get 2 Years Access',
+  true,
+  true,
+  2
+WHERE NOT EXISTS (SELECT 1 FROM public.plans WHERE name = '2 Years');
+
+INSERT INTO public.plans (
+  name,
+  price,
+  duration,
+  duration_months,
+  duration_value,
+  duration_unit,
+  description,
+  features,
+  button_label,
+  is_active,
+  is_popular,
+  display_order
+)
+SELECT
+  '3 Years',
+  4999,
+  '3 Years',
+  36,
+  3,
+  'years',
+  'Maximum savings with complete uninterrupted access',
+  '["Billing", "Invoices", "Products", "Customers", "Reports", "Stock", "Dedicated Manager"]'::jsonb,
+  'Get 3 Years Access',
+  true,
+  false,
+  3
+WHERE NOT EXISTS (SELECT 1 FROM public.plans WHERE name = '3 Years');
+
+-- 3. Enable Row Level Security (RLS)
+ALTER TABLE public.plans ENABLE ROW LEVEL SECURITY;
+
+-- 4. RLS Policies:
+-- Drop existing policies if any to allow safe re-execution
+DROP POLICY IF EXISTS "Public read plans" ON public.plans;
+DROP POLICY IF EXISTS "Admin write plans" ON public.plans;
+DROP POLICY IF EXISTS admin_all_plans ON public.plans;
+
+-- Public read access: Allows User Website to read active plans directly without hardcoded prices
+CREATE POLICY "Public read plans"
+  ON public.plans
+  FOR SELECT
+  TO public
+  USING (true);
+
+-- Admin-only write access: INSERT, UPDATE, DELETE restricted to verified Admin / Super Admin
+CREATE POLICY "Admin write plans"
+  ON public.plans
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- Grant access to PostgREST roles
+GRANT SELECT ON public.plans TO anon, authenticated;
+GRANT ALL ON public.plans TO authenticated;
+`;
+
+
 
 let detectedUserTable: 'profiles' | 'users' | null = null;
 let detectedPaymentTable: 'payments' | 'payment_requests' | null = null;
@@ -778,9 +921,30 @@ export const adminService = {
   // ----------------------------------------------------
   // PLANS & PRICING (EXACTLY 3 SLOTS: MONTHLY, 2 YEARS, 3 YEARS)
   // ----------------------------------------------------
-  async getPlans(): Promise<PlanRecord[]> {
+  async isPlansTableAvailable(force = false): Promise<boolean> {
+    if (!isSupabaseConfigured()) return false;
+    const supabase = getSupabase();
+    try {
+      const { error, status } = await supabase.from('plans').select('id').limit(1);
+      if (!error && (status === 200 || status === 204 || status === 206)) {
+        return true;
+      }
+      if (status === 401 || status === 403 || error?.code === '42501' || error?.code === 'PGRST301') {
+        return true;
+      }
+      if (error?.code === 'PGRST205' || error?.code === '42P01' || status === 404) {
+        return false;
+      }
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async getPlans(forceRecheck = false): Promise<PlanRecord[]> {
     if (!isSupabaseConfigured()) return [];
-    if (!(await checkTableExists('plans'))) return [];
+    const isAvailable = await this.isPlansTableAvailable(forceRecheck);
+    if (!isAvailable) return [];
 
     const supabase = getSupabase();
     try {
@@ -841,8 +1005,21 @@ export const adminService = {
   },
 
   async seedDefaultPlans(): Promise<PlanRecord[]> {
-    if (!isSupabaseConfigured()) return [];
+    if (!isSupabaseConfigured()) throw new Error('Supabase is not configured');
+    const isAvailable = await this.isPlansTableAvailable(true);
+    if (!isAvailable) {
+      throw new Error(
+        'Table public.plans is not ready in Supabase. Please execute the SQL migration script in your Supabase SQL Editor first.'
+      );
+    }
+
     const supabase = getSupabase();
+
+    // Check whether plans already exist before INSERT to prevent duplicates
+    const { data: existingPlans, error: checkError } = await supabase.from('plans').select('*');
+    if (!checkError && existingPlans && existingPlans.length > 0) {
+      return this.getPlans(true);
+    }
 
     const defaultPlans = [
       {
@@ -889,30 +1066,12 @@ export const adminService = {
       },
     ];
 
-    try {
-      const { data, error } = await supabase.from('plans').insert(defaultPlans).select('*');
-      if (error) throw error;
-      databaseHealthService.clearCache();
-      await this.logActivity('Seeded 3 standard plans: Monthly, 2 Years, 3 Years');
-      return (data || []).map((p: any, idx: number) => ({
-        id: p.id,
-        name: p.name,
-        price: Number(p.price) || 0,
-        duration: p.duration,
-        duration_months: p.duration_months,
-        duration_value: p.duration_value || (idx === 0 ? 1 : idx === 1 ? 2 : 3),
-        duration_unit: p.duration_unit || (idx === 0 ? 'months' : 'years'),
-        description: p.description,
-        features: Array.isArray(p.features) ? p.features : [],
-        button_label: p.button_label || 'Get Started',
-        is_active: p.is_active,
-        is_popular: p.is_popular,
-        display_order: p.display_order || (idx + 1),
-        created_at: p.created_at,
-      }));
-    } catch (err) {
-      throw err;
-    }
+    const { error: insertError } = await supabase.from('plans').insert(defaultPlans);
+    if (insertError) throw insertError;
+
+    databaseHealthService.clearCache();
+    await this.logActivity('Seeded 3 standard plans: Monthly, 2 Years, 3 Years');
+    return this.getPlans(true);
   },
 
   async updatePlan(plan: Partial<PlanRecord> & { id: string }): Promise<void> {
@@ -921,7 +1080,7 @@ export const adminService = {
     const supabase = getSupabase();
 
     // Enforce: only ONE plan marked popular at a time
-    if (plan.is_popular) {
+    if (plan.is_popular === true) {
       await supabase.from('plans').update({ is_popular: false }).neq('id', plan.id);
     }
 
@@ -958,13 +1117,14 @@ export const adminService = {
     if (plan.description !== undefined) updatePayload.description = sanitizeText(plan.description, 500);
     if (plan.features !== undefined) updatePayload.features = plan.features;
     if (plan.button_label !== undefined) updatePayload.button_label = sanitizeText(plan.button_label, 50);
-    if (plan.is_active !== undefined) updatePayload.is_active = plan.is_active;
-    if (plan.is_popular !== undefined) updatePayload.is_popular = plan.is_popular;
+    if (plan.is_active !== undefined) updatePayload.is_active = Boolean(plan.is_active);
+    if (plan.is_popular !== undefined) updatePayload.is_popular = Boolean(plan.is_popular);
     if (plan.display_order !== undefined) updatePayload.display_order = Number(plan.display_order) || 1;
 
     const { error } = await supabase.from('plans').update(updatePayload).eq('id', plan.id);
     if (error) throw error;
 
+    databaseHealthService.clearCache();
     await this.logActivity(`Updated plan: ${plan.name || plan.id}`, null, {
       plan_id: plan.id,
       price: plan.price,
